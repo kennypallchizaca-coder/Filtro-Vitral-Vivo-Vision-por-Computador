@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -258,38 +259,77 @@ int benchmark(VideoCapture& video, const string& fuente, const string& ruta, int
     return 0;
 }
 
+void eventoVista3D(const viz::KeyboardEvent& evento, void* datos) {
+    if (evento.action == viz::KeyboardEvent::KEY_DOWN && evento.code == 27)
+        static_cast<viz::Viz3d*>(datos)->close();
+}
+
+void mostrarVista3D(const Mat& frame, const Mat& resultado, const string& captura = "") {
+    Mat color;
+    if (resultado.channels() == 1)
+        cvtColor(resultado, color, COLOR_GRAY2BGR);
+    else
+        color = resultado;
+    viz::Viz3d visor("Spider-Verse | Fotograma 3D | Q o Esc para volver");
+    visor.setWindowSize(Size(1280, 720));
+    visor.setBackgroundColor(viz::Color(22, 22, 22));
+    visor.setViewerPose(Affine3d(Matx33d::eye(), Vec3d(0, 0, -5.6)));
+    double ancho = 1.85;
+    double alto = ancho * frame.rows / frame.cols;
+    visor.showWidget("Original", viz::WImage3D(frame, Size2d(ancho, alto), Vec3d(-0.98, 0, 0),
+                                               Vec3d(0, 0, 1), Vec3d(0, 1, 0)));
+    visor.showWidget("Efecto", viz::WImage3D(color, Size2d(ancho, alto), Vec3d(0.98, 0, 0),
+                                             Vec3d(0, 0, 1), Vec3d(0, 1, 0)));
+    visor.registerKeyboardCallback(eventoVista3D, &visor);
+    if (captura.empty()) {
+        // La vista 3D inspecciona este fotograma; su interacción no modifica los sliders.
+        visor.spin();
+    } else {
+        crearCarpetaPadre(captura);
+        // saveScreenshot necesita el interactor inicializado por VTK.
+        visor.spinOnce(1, true);
+        visor.saveScreenshot(captura);
+    }
+    visor.close();
+}
+
 int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInterfaz& estado,
                const string& dispositivo, bool smoke, int limite, const string& rutaCaptura) {
-    Mat frame, resultado;
+    Mat frame, resultado, color, vistaOriginal, vistaEfecto;
     if (!leerFrame(video, frame, tamano, false))
         throw runtime_error("El primer fotograma esta vacio.");
     Efecto<Mat> cpu;
     Efecto<UMat> gpu;
     UMat frameGPU;
     RecursosProceso recursos;
-    viz::Viz3d visor("Spider-Verse | Original y efecto | VTK 3D");
-    visor.setWindowSize(Size(1280, 900));
-    visor.setBackgroundColor(viz::Color(22, 22, 22));
-    // Los ejes OpenCV, con Y hacia abajo, mantienen las texturas verticales y alineadas.
-    auto poseInicial = Affine3d(Matx33d::eye(), Vec3d(0, 0, -5.6));
-    visor.setViewerPose(poseInicial);
-    double anchoPlano = 1.85;
-    double altoPlano = anchoPlano * tamano.height / tamano.width;
-    viz::WImage3D original(frame, Size2d(anchoPlano, altoPlano), Vec3d(-0.98, -0.15, 0),
-                           Vec3d(0, 0, 1), Vec3d(0, 1, 0));
-    viz::WImage3D efecto(frame, Size2d(anchoPlano, altoPlano), Vec3d(0.98, -0.15, 0),
-                         Vec3d(0, 0, 1), Vec3d(0, 1, 0));
-    visor.showWidget("Original", original);
-    visor.showWidget("Efecto", efecto);
-    visor.registerKeyboardCallback(eventoTeclado, &estado);
-    visor.registerMouseCallback(eventoRaton, &estado);
+    const string ventana = "Lienzo";
+#ifdef _WIN32
+    // Qt lee esta opción del proceso al crear la primera ventana.
+    if (!getenv("QT_QPA_PLATFORM"))
+        _putenv_s("QT_QPA_PLATFORM", "windows:darkmode=0");
+#endif
+    namedWindow(ventana, WINDOW_AUTOSIZE);
+    crearControles(ventana, estado.parametros);
     array<string, 5> etapas = {"Efecto final", "Gris CLAHE + mediana", "Gaussiano", "Kernel propio",
                                "Mascara de contornos"};
     array<string, 3> modos = {"CPU Mat", "OpenCL UMat", "Comparar CPU / OpenCL"};
+    const int anchoVista = 400, altoVista = 300, altoTexto = 80;
+    // Reducimos la vista para que el lienzo y las barras quepan juntos.
+    double escalaVista = min(double(anchoVista) / tamano.width, double(altoVista) / tamano.height);
+    Size tamanoVista(max(1, cvRound(tamano.width * escalaVista)),
+                     max(1, cvRound(tamano.height * escalaVista)));
+    Rect posicionOriginal((anchoVista - tamanoVista.width) / 2,
+                          altoTexto + (altoVista - tamanoVista.height) / 2,
+                          tamanoVista.width, tamanoVista.height);
+    Rect posicionEfecto = posicionOriginal + Point(anchoVista, 0);
+    // Los Ejemplos 6 y 7 componen las imágenes con copyTo sobre regiones de un Mat.
+    const Scalar fondo(240, 240, 240), texto(25, 25, 25);
+    Mat lienzo(Size(2 * anchoVista, altoTexto + altoVista), CV_8UC3, fondo);
     ofstream registro;
     int indice = 0;
     double fps = 0;
-    while (!visor.wasStopped() && !estado.salir) {
+    bool ventanaAbierta = true;
+    while (!estado.salir && ventanaAbierta) {
         auto inicio = Reloj::now();
         if (indice > 0 && !leerFrame(video, frame, tamano, false)) {
             if (esCamara(fuente))
@@ -297,57 +337,54 @@ int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInt
             cout << "Fin de la fuente de video.\n";
             break;
         }
-        // spinOnce atiende cambios del usuario; el CSV debe conservar los parámetros ya usados.
+        estado.parametros = leerControles(ventana, estado.parametros.tamGauss);
         const Parametros parametrosFrame = estado.parametros;
         const int etapaFrame = estado.etapa;
-        Tiempos t = procesarFrame(frame, parametrosFrame, estado.modo, estado.etapa, cpu, gpu,
+        Tiempos t = procesarFrame(frame, parametrosFrame, estado.modo, etapaFrame, cpu, gpu,
                                   frameGPU, resultado);
-        original.setImage(frame);
-        efecto.setImage(resultado);
+        if (resultado.channels() == 1)
+            cvtColor(resultado, color, COLOR_GRAY2BGR);
+        else
+            color = resultado;
+        // Solo redimensionamos copias de presentación; el filtro conserva su resolución.
+        resize(frame, vistaOriginal, tamanoVista, 0, 0, INTER_AREA);
+        resize(color, vistaEfecto, tamanoVista, 0, 0, INTER_AREA);
+        lienzo(Rect(0, 0, lienzo.cols, altoTexto)).setTo(fondo);
+        vistaOriginal.copyTo(lienzo(posicionOriginal));
+        vistaEfecto.copyTo(lienzo(posicionEfecto));
+
         MuestraRecursos muestra = recursos.leer();
-        Size ventana = visor.getWindowSize();
-        if (ventana.width < 650 || ventana.height < 500) {
-            visor.setWindowSize(Size(max(650, ventana.width), max(500, ventana.height)));
-            ventana = visor.getWindowSize();
-        }
-        Mat lienzo = dibujarControles(estado, ventana);
-        Rect posicionVTK(estado.panel.x, ventana.height - estado.panel.y - estado.panel.height,
-                         estado.panel.width, estado.panel.height);
-        visor.showWidget("Controles", viz::WImageOverlay(lienzo, posicionVTK));
-        string mediciones = "CPU: " + (t.cpu < 0 ? string("--") : numero(t.cpu)) +
-                            " ms | OpenCL: " + (t.gpu < 0 ? string("--") : numero(t.gpu)) +
-                            " ms | FPS ventana: " + numero(fps, 1);
-        if (t.gpu >= 0)
-            mediciones += " | Subida/bajada: " + numero(t.subida) + "/" + numero(t.bajada) + " ms";
+        string tiempos = "CPU: " + (t.cpu < 0 ? string("--") : numero(t.cpu)) +
+                         " ms | OpenCL: " + (t.gpu < 0 ? string("--") : numero(t.gpu)) +
+                         " ms | FPS: " + numero(fps, 1);
+        string transferencias = "Subida: " + (t.gpu < 0 ? string("--") : numero(t.subida)) +
+                                " ms | Bajada: " + (t.gpu < 0 ? string("--") : numero(t.bajada)) +
+                                " ms";
         string recursosTexto =
-            "RAM proceso: " + numero(muestra.ramMiB, 1) + " MiB | CPU proceso: " +
-            (muestra.cpuDisponible ? numero(muestra.cpuPorcentaje, 1) + "%" : "sin muestra") +
-            " | GPU proceso (motor max): " +
+            "RAM: " + numero(muestra.ramMiB, 1) + " MiB | CPU proceso: " +
+            (muestra.cpuDisponible ? numero(muestra.cpuPorcentaje, 1) + "%" : "sin muestra");
+        string usoGPU =
+            "GPU proceso (motor max): " +
             (muestra.gpuDisponible ? numero(muestra.gpuMotorPorcentaje, 1) + "%" : "sin muestra");
-        visor.showWidget("Titulo",
-                         viz::WText("SPIDER-VERSE | " + etapas[estado.etapa],
-                                    Point(20, ventana.height - 38), 19, viz::Color::white()));
-        visor.showWidget("Tiempos", viz::WText(mediciones, Point(20, ventana.height - 65), 15,
-                                               viz::Color::white()));
-        visor.showWidget("Recursos", viz::WText(recursosTexto, Point(20, ventana.height - 89), 15,
-                                                viz::Color::white()));
-        visor.showWidget(
-            "Modo", viz::WText(modos[estado.modo] + " | " + dispositivo,
-                               Point(20, ventana.height - 113), 15, viz::Color(100, 220, 255)));
-        visor.showWidget("Ayuda",
-                         viz::WText("Espacio: modo | Tab: etapa | B: registrar CSV | Esc: salir" +
-                                        string(estado.registrar ? " | GRABANDO" : ""),
-                                    Point(20, ventana.height - 137), 15, viz::Color::white()));
-        visor.showWidget("EtiquetaOriginal", viz::WText("ORIGINAL", Point(65, ventana.height - 180),
-                                                        17, viz::Color::white()));
-        visor.showWidget("EtiquetaEfecto",
-                         viz::WText("EFECTO", Point(ventana.width / 2 + 20, ventana.height - 180),
-                                    17, viz::Color::white()));
-        if (estado.reiniciarVista) {
-            visor.setViewerPose(poseInicial);
-            estado.reiniciarVista = false;
-        }
-        visor.spinOnce(1, true);
+        if (estado.registrar)
+            usoGPU += " | CSV activo";
+        string modo = modos[estado.modo] + " | Sigma: " + numero(parametrosFrame.sigma);
+
+        putText(lienzo, "Original", Point(8, 18), FONT_HERSHEY_SIMPLEX, 0.55, texto, 1, LINE_AA);
+        putText(lienzo, "Efecto: " + etapas[etapaFrame], Point(408, 18),
+                FONT_HERSHEY_SIMPLEX, 0.55, texto, 1, LINE_AA);
+        putText(lienzo, tiempos, Point(8, 37), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+        putText(lienzo, transferencias, Point(408, 37), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1,
+                LINE_AA);
+        putText(lienzo, recursosTexto, Point(8, 55), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+        putText(lienzo, usoGPU, Point(408, 55), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+        putText(lienzo, modo, Point(8, 73), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+        putText(lienzo, "Espacio modo | T etapa | V 3D | B CSV | Esc salir", Point(408, 73),
+                FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+        imshow(ventana, lienzo);
+        int tecla = waitKey(1);
+        // Los eventos pueden cambiar sliders; el CSV conserva los valores del frame procesado.
+        eventoTeclado(tecla, estado);
         double ciclo = milisegundos(inicio);
         double actual = 1000 / max(ciclo, 0.001);
         fps = indice == 0 ? actual : fps * 0.9 + actual * 0.1;
@@ -365,24 +402,34 @@ int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInt
         }
         ++indice;
         if (smoke && indice >= limite) {
-            crearCarpetaPadre(rutaCaptura);
-            visor.saveScreenshot(rutaCaptura);
-            cout << "VTK: " << indice << " fotogramas de " << fuente << "; captura: " << rutaCaptura
-                 << '\n';
+            mostrarVista3D(frame, resultado, rutaCaptura);
+            cout << "Comparacion: " << indice << " fotogramas de " << fuente
+                 << "; captura VTK: " << rutaCaptura << '\n';
             break;
         }
+        if (tecla == 'v' || tecla == 'V')
+            mostrarVista3D(frame, resultado);
+        try {
+            ventanaAbierta = getWindowProperty(ventana, WND_PROP_VISIBLE) >= 1;
+        } catch (const cv::Exception& error) {
+            // Qt elimina guiReceiver cuando se cierra la última ventana con X.
+            if (error.code != Error::StsNullPtr)
+                throw;
+            ventanaAbierta = false;
+        }
     }
+    if (ventanaAbierta)
+        destroyWindow(ventana);
     if (smoke && indice < limite)
-        throw runtime_error("La prueba VTK termino antes del limite solicitado.");
-    visor.close();
+        throw runtime_error("La comparacion termino antes del limite solicitado.");
     return 0;
 }
 
 int main(int argc, char** argv) {
     try {
         const string claves =
-            "{help h||Ayuda}{benchmark||Medir sin ventanas}{smoke||Prueba VTK con cierre "
-            "automatico}"
+            "{help h||Ayuda}{benchmark||Medir sin ventanas}{smoke||Comparacion con cierre "
+            "automatico y captura VTK}"
             "{source|0|Camara numerica o archivo}{mode|both|cpu, gpu o both}"
             "{frames|120|Numero de muestras}{width|640|Ancho}{height|480|Alto}"
             "{output||CSV de benchmark o captura smoke}"
@@ -393,9 +440,9 @@ int main(int argc, char** argv) {
         CommandLineParser argumentos(argc, argv, claves);
         if (argumentos.has("help")) {
             argumentos.printMessage();
-            cout << "Controles VTK: Espacio=modo, Tab=etapa, B=CSV, R=vista, Esc=salir.\n"
-                    "Flechas arriba/abajo=parametro, izquierda/derecha=ajuste. Botones +/- con "
-                    "raton.\n";
+            cout
+                << "Controles: sliders=parametros, Espacio=modo, T=etapa, V=vista 3D, B=CSV, "
+                   "Esc=salir.\nVista 3D: arrastrar=rotar, R=encuadrar, Q o Esc=volver al video.\n";
             return 0;
         }
         string fuente = argumentos.get<string>("source");

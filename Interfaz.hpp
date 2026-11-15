@@ -1,9 +1,7 @@
 #pragma once
 
 #include "Principal.hpp"
-#include <opencv2/viz.hpp>
-#include <algorithm>
-#include <array>
+#include <opencv2/highgui.hpp>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -19,133 +17,78 @@ inline string numero(double valor, int decimales = 2) {
 
 struct EstadoInterfaz {
     Parametros parametros;
-    // Modo 0: CPU; 1: OpenCL; 2: ambos sobre el mismo fotograma.
-    int modo = 2, etapa = 0, seleccionado = 0;
-    bool gpuDisponible = false, salir = false, registrar = false, reiniciarVista = false;
-    Rect panel;
-    int altoVentana = 900;
-    array<Rect, 12> menos, mas;
+    int modo = 2, etapa = 0;
+    bool gpuDisponible = false, salir = false, registrar = false;
 };
 
-inline void ajustarParametro(Parametros& p, int indice, int direccion) {
-    switch (indice) {
-        case 0:
-            p.umbral = clamp(p.umbral + direccion * 5, 0, 255);
-            break;
-        case 1:
-            // El paso de dos conserva el tamaño impar que exige el filtro Gaussiano.
-            p.tamGauss = clamp(p.tamGauss + direccion * 2, 3, 51);
-            break;
-        case 2:
-            p.sigma = clamp(p.sigma + direccion * 0.25, 0.1, 10.0);
-            break;
-        case 3:
-            p.pesoPropio = clamp(p.pesoPropio + direccion * 0.05, 0.0, 1.0);
-            break;
-        case 4:
-            p.diagonal = clamp(p.diagonal + direccion * 0.25, 0.0, 3.0);
-            break;
-        case 5:
-            p.radioPuntos = clamp(p.radioPuntos + direccion, 0, 3);
-            break;
-        case 6:
-            p.niveles = clamp(p.niveles + direccion, 2, 16);
-            break;
-        case 7:
-            p.saturacion = clamp(p.saturacion + direccion * 0.05, 0.0, 3.0);
-            break;
-        case 8:
-            p.brillo = clamp(p.brillo + direccion * 0.05, 0.0, 3.0);
-            break;
-        case 9:
-            p.neon = clamp(p.neon + direccion * 0.05, 0.0, 3.0);
-            break;
-        case 10:
-            p.desplazamiento = clamp(p.desplazamiento + direccion, 0, 3);
-            break;
-        case 11:
-            p.contraste = clamp(p.contraste + direccion * 0.25, 0.1, 8.0);
-            break;
-    }
+inline void eventoTrack(int, void*) {
 }
 
-inline void eventoTeclado(const viz::KeyboardEvent& evento, void* datos) {
-    // Ignorar KEY_UP evita aplicar dos cambios por una sola pulsación.
-    if (evento.action != viz::KeyboardEvent::KEY_DOWN)
-        return;
-    auto& estado = *static_cast<EstadoInterfaz*>(datos);
-    if (evento.code == 27 || evento.code == 'q')
+inline void crearControles(const string& ventana, const Parametros& p) {
+    // Los Ejemplos 3 y 7 crean las barras y luego asignan sus posiciones iniciales.
+    createTrackbar("Kernel", ventana, nullptr, 51, eventoTrack, nullptr);
+    createTrackbar("Sigma x100", ventana, nullptr, 1000, eventoTrack, nullptr);
+    createTrackbar("Umbral", ventana, nullptr, 255, eventoTrack, nullptr);
+    createTrackbar("Peso propio %", ventana, nullptr, 100, eventoTrack, nullptr);
+    createTrackbar("Diagonal x100", ventana, nullptr, 300, eventoTrack, nullptr);
+    createTrackbar("Radio puntos", ventana, nullptr, 3, eventoTrack, nullptr);
+    createTrackbar("Niveles", ventana, nullptr, 16, eventoTrack, nullptr);
+    createTrackbar("Saturacion x100", ventana, nullptr, 300, eventoTrack, nullptr);
+    createTrackbar("Brillo x100", ventana, nullptr, 300, eventoTrack, nullptr);
+    createTrackbar("Neon x100", ventana, nullptr, 300, eventoTrack, nullptr);
+    createTrackbar("Glitch px", ventana, nullptr, 3, eventoTrack, nullptr);
+    createTrackbar("CLAHE x100", ventana, nullptr, 800, eventoTrack, nullptr);
+
+    setTrackbarMin("Kernel", ventana, 3);
+    setTrackbarMin("Sigma x100", ventana, 10);
+    setTrackbarMin("Niveles", ventana, 2);
+    setTrackbarMin("CLAHE x100", ventana, 10);
+
+    setTrackbarPos("Kernel", ventana, p.tamGauss);
+    setTrackbarPos("Sigma x100", ventana, cvRound(p.sigma * 100));
+    setTrackbarPos("Umbral", ventana, p.umbral);
+    setTrackbarPos("Peso propio %", ventana, cvRound(p.pesoPropio * 100));
+    setTrackbarPos("Diagonal x100", ventana, cvRound(p.diagonal * 100));
+    setTrackbarPos("Radio puntos", ventana, p.radioPuntos);
+    setTrackbarPos("Niveles", ventana, p.niveles);
+    setTrackbarPos("Saturacion x100", ventana, cvRound(p.saturacion * 100));
+    setTrackbarPos("Brillo x100", ventana, cvRound(p.brillo * 100));
+    setTrackbarPos("Neon x100", ventana, cvRound(p.neon * 100));
+    setTrackbarPos("Glitch px", ventana, p.desplazamiento);
+    setTrackbarPos("CLAHE x100", ventana, cvRound(p.contraste * 100));
+}
+
+inline Parametros leerControles(const string& ventana, int kernelAnterior) {
+    Parametros p;
+    int tam = getTrackbarPos("Kernel", ventana);
+    if (tam % 2 == 0) {
+        // El Gaussiano exige impares. Saltamos el par en la dirección del ajuste.
+        tam += tam < kernelAnterior ? -1 : 1;
+        setTrackbarPos("Kernel", ventana, tam);
+    }
+    p.tamGauss = tam;
+    // Las barras son enteras; dividir entre 100 recupera los parámetros decimales.
+    p.sigma = getTrackbarPos("Sigma x100", ventana) / 100.0;
+    p.umbral = getTrackbarPos("Umbral", ventana);
+    p.pesoPropio = getTrackbarPos("Peso propio %", ventana) / 100.0;
+    p.diagonal = getTrackbarPos("Diagonal x100", ventana) / 100.0;
+    p.radioPuntos = getTrackbarPos("Radio puntos", ventana);
+    p.niveles = getTrackbarPos("Niveles", ventana);
+    p.saturacion = getTrackbarPos("Saturacion x100", ventana) / 100.0;
+    p.brillo = getTrackbarPos("Brillo x100", ventana) / 100.0;
+    p.neon = getTrackbarPos("Neon x100", ventana) / 100.0;
+    p.desplazamiento = getTrackbarPos("Glitch px", ventana);
+    p.contraste = getTrackbarPos("CLAHE x100", ventana) / 100.0;
+    return p;
+}
+
+inline void eventoTeclado(int tecla, EstadoInterfaz& estado) {
+    if (tecla == 27 || tecla == 'q' || tecla == 'Q')
         estado.salir = true;
-    if (evento.code == ' ')
+    if (tecla == ' ')
         estado.modo = estado.gpuDisponible ? (estado.modo + 1) % 3 : 0;
-    if (evento.code == '\t')
+    if (tecla == 't' || tecla == 'T')
         estado.etapa = (estado.etapa + 1) % 5;
-    if (evento.code == 'b' || evento.code == 'B')
+    if (tecla == 'b' || tecla == 'B')
         estado.registrar = !estado.registrar;
-    if (evento.code == 'r' || evento.code == 'R')
-        estado.reiniciarVista = true;
-    if (evento.symbol == "Up")
-        estado.seleccionado = (estado.seleccionado + 11) % 12;
-    if (evento.symbol == "Down")
-        estado.seleccionado = (estado.seleccionado + 1) % 12;
-    if (evento.symbol == "Left")
-        ajustarParametro(estado.parametros, estado.seleccionado, -1);
-    if (evento.symbol == "Right")
-        ajustarParametro(estado.parametros, estado.seleccionado, 1);
-}
-
-inline void eventoRaton(const viz::MouseEvent& evento, void* datos) {
-    if (evento.type != viz::MouseEvent::MouseButtonPress ||
-        evento.button != viz::MouseEvent::LeftButton)
-        return;
-    auto& estado = *static_cast<EstadoInterfaz*>(datos);
-    // VTK cuenta Y desde abajo; las coordenadas del panel empiezan arriba.
-    Point punto =
-        Point(evento.pointer.x, estado.altoVentana - 1 - evento.pointer.y) - estado.panel.tl();
-    for (int i = 0; i < 12; ++i) {
-        if (estado.menos[i].contains(punto) || estado.mas[i].contains(punto)) {
-            estado.seleccionado = i;
-            ajustarParametro(estado.parametros, i, estado.mas[i].contains(punto) ? 1 : -1);
-            return;
-        }
-    }
-}
-
-inline Mat dibujarControles(EstadoInterfaz& estado, Size ventana) {
-    estado.altoVentana = ventana.height;
-    int ancho = max(600, ventana.width - 40);
-    Mat lienzo(224, ancho, CV_8UC3, Scalar(30, 30, 30));
-    const Parametros& p = estado.parametros;
-    array<string, 12> etiquetas = {
-        "Umbral: " + to_string(p.umbral),
-        "Gauss: " + to_string(p.tamGauss) + " x " + to_string(p.tamGauss),
-        "Sigma: " + numero(p.sigma),
-        "Peso propio: " + numero(p.pesoPropio * 100, 0) + "%",
-        "Diagonal: " + numero(p.diagonal),
-        "Radio puntos: " + to_string(p.radioPuntos),
-        "Niveles: " + to_string(p.niveles),
-        "Saturacion: " + numero(p.saturacion),
-        "Brillo: " + numero(p.brillo),
-        "Neon: " + numero(p.neon),
-        "Glitch: " + to_string(p.desplazamiento) + " px",
-        "CLAHE: " + numero(p.contraste)};
-    for (int i = 0; i < 12; ++i) {
-        int x = (i / 6) * ancho / 2;
-        int y = 9 + (i % 6) * 31;
-        Scalar color = i == estado.seleccionado ? Scalar(100, 220, 255) : Scalar(235, 235, 235);
-        putText(lienzo, etiquetas[i], Point(x + 12, y + 21), FONT_HERSHEY_SIMPLEX, 0.52, color, 1,
-                LINE_AA);
-        estado.menos[i] = Rect(x + ancho / 2 - 94, y, 32, 26);
-        estado.mas[i] = Rect(x + ancho / 2 - 50, y, 32, 26);
-        for (const auto& boton : {estado.menos[i], estado.mas[i]})
-            rectangle(lienzo, boton, color, 1);
-        putText(lienzo, "-", estado.menos[i].tl() + Point(10, 20), FONT_HERSHEY_SIMPLEX, 0.65,
-                color, 1, LINE_AA);
-        putText(lienzo, "+", estado.mas[i].tl() + Point(7, 20), FONT_HERSHEY_SIMPLEX, 0.65, color,
-                1, LINE_AA);
-    }
-    putText(lienzo, "Flechas: elegir/ajustar | Arrastrar imagen: rotar 3D | R: restaurar vista",
-            Point(12, 213), FONT_HERSHEY_SIMPLEX, 0.48, Scalar(200, 200, 200), 1, LINE_AA);
-    estado.panel = Rect(20, max(0, ventana.height - lienzo.rows - 12), ancho, lienzo.rows);
-    return lienzo;
 }

@@ -11,13 +11,13 @@ struct Parametros {
     double sigma = 1.73;
     double pesoPropio = 0.3;
     double diagonal = 1.0;
-    int niveles = 6;
-    int radioPuntos = 2;
+    int niveles = 8;
+    int radioPuntos = 1;
     double saturacion = 1.25;
-    double brillo = 1.05;
+    double brillo = 1.0;
     double neon = 1.15;
     int desplazamiento = 1;
-    double contraste = 2.0;
+    double contraste = 1.5;
 
     void validar() const {
         // Las comparaciones de rango también rechazan NaN antes de entrar a OpenCV.
@@ -112,11 +112,31 @@ struct Efecto {
         cv::threshold(gradiente, binaria, p.umbral, 255, cv::THRESH_BINARY);
 
         cv::LUT(mediana, tabla, comic);
+        aplicarPaleta(gris, comic);
         aplicarTrama(gris, comic, p.radioPuntos);
+        aplicarRayado(gris, comic);
         comic.setTo(cv::Scalar::all(0), binaria);
         aplicarNeon(comic, p);
         aplicarGlitch(comic, p.desplazamiento);
         return comic;
+    }
+
+    void aplicarPaleta(const Imagen& gris, Imagen& comic) {
+        validarColor(comic);
+        if (gris.empty() || gris.type() != CV_8UC1 || gris.size() != comic.size())
+            throw std::invalid_argument("La paleta requiere gris 8UC1 del mismo tamano que BGR");
+
+        tono.create(comic.size(), CV_8UC3);
+        // Exclude near-black pixels so the palette preserves the deepest blacks.
+        cv::inRange(gris, cv::Scalar(25), cv::Scalar(120), mascaraTono);
+        tono.setTo(cv::Scalar(150, 55, 95));
+        cv::addWeighted(comic, 0.75, tono, 0.25, 0, mezcla);
+        mezcla.copyTo(comic, mascaraTono);
+
+        cv::inRange(gris, cv::Scalar(175), cv::Scalar(245), mascaraTono);
+        tono.setTo(cv::Scalar(90, 195, 245));
+        cv::addWeighted(comic, 0.90, tono, 0.10, 0, mezcla);
+        mezcla.copyTo(comic, mascaraTono);
     }
 
     void aplicarTrama(const Imagen& gris, Imagen& comic, int radioMaximo) {
@@ -151,7 +171,28 @@ struct Efecto {
         brilloExpandido(cv::Rect(0, 0, gris.cols, gris.rows))
             .convertTo(radioCelda, CV_8U, -radioMaximo / 255.0, radioMaximo);
         cv::compare(radioCelda, radioMinimo, puntos, cv::CMP_GE);
-        comic.setTo(cv::Scalar::all(0), puntos);
+        // Reserve deep shadows for hatching and keep highlights clear.
+        cv::inRange(gris, cv::Scalar(70), cv::Scalar(180), mascaraTrama);
+        cv::bitwise_and(puntos, mascaraTrama, puntos);
+        comic.convertTo(mezcla, -1, 0.65);
+        mezcla.copyTo(comic, puntos);
+    }
+
+    void aplicarRayado(const Imagen& gris, Imagen& comic) {
+        validarColor(comic);
+        if (gris.empty() || gris.type() != CV_8UC1 || gris.size() != comic.size())
+            throw std::invalid_argument("El rayado requiere gris 8UC1 del mismo tamano que BGR");
+        if (tamanoRayado != gris.size()) {
+            cv::Mat baldosa = cv::Mat::zeros(8, 8, CV_8UC1), mosaico;
+            cv::line(baldosa, cv::Point(0, 0), cv::Point(7, 7), cv::Scalar(255), 1);
+            cv::repeat(baldosa, (gris.rows + 7) / 8, (gris.cols + 7) / 8, mosaico);
+            mosaico(cv::Rect(0, 0, gris.cols, gris.rows)).copyTo(rayado);
+            tamanoRayado = gris.size();
+        }
+        cv::inRange(gris, cv::Scalar(0), cv::Scalar(69), mascaraRayado);
+        cv::bitwise_and(rayado, mascaraRayado, mascaraRayado);
+        comic.convertTo(mezcla, -1, 0.70);
+        mezcla.copyTo(comic, mascaraRayado);
     }
 
     void aplicarNeon(Imagen& comic, const Parametros& p) {
@@ -206,9 +247,10 @@ struct Efecto {
     cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
     cv::Mat muestreo = cv::Mat_<double>({2, 3}, {8, 0, 4, 0, 8, 4});
     Imagen radioMinimo, brilloCeldas, brilloExpandido, radioCelda, puntos;
+    Imagen tono, mezcla, mascaraTono, mascaraTrama, rayado, mascaraRayado;
     Imagen tablaSaturacion, tablaBrillo, tablaNeon, mascaraNeon, valorNeon;
     Imagen azulExtendido, rojoExtendido, azulMovido, rojoMovido;
-    cv::Size tamanoTrama;
+    cv::Size tamanoTrama, tamanoRayado;
     int nivelesAnteriores = -1, radioAnterior = -1, desplazamientoAnterior = -1;
     double diagonalAnterior = -1, contrasteAnterior = -1;
     double saturacionAnterior = -1, brilloAnterior = -1, neonAnterior = -1;

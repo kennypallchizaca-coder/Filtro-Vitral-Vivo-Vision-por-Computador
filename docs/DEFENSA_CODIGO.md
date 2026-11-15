@@ -8,8 +8,8 @@ La base está en `Vision-Computador/Codigos`, la carpeta compartida por el alumn
 
 | Material local | Qué aparece realmente | Cómo se utiliza aquí |
 | --- | --- | --- |
-| Ejemplo 3: HSV y umbral de color, Unidad 1 | `cvtColor` a HSV/Lab, `inRange` y controles `HMin/SMin/VMin/HMax/SMax/VMax` con `createTrackbar` | Se reutilizan las conversiones y la selección por rango para la máscara de neón. La modificación de S/V mediante LUT y el panel VTK son adaptaciones del proyecto. |
-| Ejemplo 5: CLAHE y convolución, Unidad 2 | `createCLAHE`, límite 40, cuadrícula 8×8 y mediana de tamaño 5 sobre gris | Se conserva CLAHE, aplicado aquí a L de Lab con límite inicial 2. La mediana pasa a 3×3 sobre la imagen en color. |
+| Ejemplo 3: HSV y umbral de color, Unidad 1 | `cvtColor` a HSV/Lab, `inRange` y controles `HMin/SMin/VMin/HMax/SMax/VMax` con `createTrackbar` | Se reutilizan las conversiones, la selección por rango y los trackbars. La modificación de S/V mediante LUT es una adaptación del proyecto. |
+| Ejemplo 5: CLAHE y convolución, Unidad 2 | `createCLAHE`, límite 40, cuadrícula 8×8 y mediana de tamaño 5 sobre gris | Se conserva CLAHE, aplicado aquí a L de Lab con límite inicial 1,5. La mediana pasa a 3×3 sobre la imagen en color. |
 | Ejemplo 6: Gaussiano y Sobel, Unidad 2 | Gaussiano 5×5, sigma 1,73, Sobel `CV_16S`, `convertScaleAbs` y `addWeighted` con pesos 0,5/0,5 | Se conserva esa secuencia y sus valores iniciales; tamaño y sigma se vuelven ajustables. El kernel propio y la máscara de tinta son ampliaciones del proyecto. |
 | Ejemplo 9: sal y pimienta, Unidad 2 | Generación de ruido, `medianBlur(...,5)`, controles, Gaussiano y Sobel | Refuerza el uso de mediana para ruido impulsivo. No se reutiliza `generarRuido` ni se añade ruido artificial al video del proyecto. |
 
@@ -20,7 +20,7 @@ El kernel ajustable aplica la idea de filtrado por una vecindad estudiada en con
 Los códigos de clase revisados no incluyen las siguientes partes de esta versión:
 
 - La plantilla `Efecto<Imagen>`, la ejecución `UMat/OpenCL` y la trama de puntos mediante operaciones matriciales. Permiten compartir el efecto entre CPU y GPU; introducen construcciones más avanzadas que las de los ejemplos.
-- La ventana VTK, sus planos texturizados y los botones del panel. En clase se usan ventanas HighGUI, `imshow`, `waitKey` y trackbars; aquí se mantienen matrices y callbacks, adaptados a VTK.
+- La vista VTK opcional y sus planos texturizados. La comparación principal utiliza HighGUI, `imshow`, `waitKey` y trackbars, como los ejemplos; VTK se abre con V para inspeccionar el fotograma actual.
 - Los contadores CPU/GPU/RAM de Windows y la comparación automatizada de tiempos con calentamiento y CSV. El Ejemplo 5 ya guarda un histograma con `ofstream`; aquí se reutiliza la idea de escribir datos, con un formato y mediciones nuevos.
 
 Para defenderlo, atribuye los filtros base a los ejemplos del docente y explica esas ampliaciones como trabajo del proyecto con asistencia de Codex. La estética cómic, las LUT de color, los puntos, el neón y el desplazamiento RGB combinan esas operaciones para el objetivo visual elegido.
@@ -35,12 +35,12 @@ Las construcciones nuevas tienen una función concreta:
 
 - `struct` agrupa datos relacionados, como `Parametros` o `Tiempos`; sus funciones son métodos. `private` reserva los detalles internos.
 - `template<class Imagen>` permite compilar el mismo efecto con `Mat` y con `UMat`. Evita mantener dos algoritmos que puedan terminar usando parámetros diferentes.
-- `vector<Imagen>(3)` guarda tres canales; `array<Rect,12>` guarda los doce botones de cada signo. El primero tiene tamaño dinámico y el segundo tamaño fijo.
+- `vector<Imagen>(3)` guarda tres canales; `array<string,5>` guarda los cinco nombres de etapas. El primero tiene tamaño dinámico y el segundo tamaño fijo.
 - Una referencia `&` trabaja sobre el objeto existente. `const` impide modificarlo a través de esa referencia. El resultado devuelto por `procesar` sigue perteneciendo al efecto y se reutiliza en el siguiente fotograma.
 - Asignar un `Mat` normalmente comparte sus datos mediante una cabecera; `clone()` crea una copia independiente cuando se necesita conservar una imagen.
 - `auto` deduce el tipo; los bucles `for` recorren muestras o canales. Las lambdas son funciones pequeñas usadas al validar texto.
 - `chrono::steady_clock` mide intervalos sin depender de cambios en la hora del sistema. `duration` convierte el intervalo a segundos o milisegundos.
-- Un callback es una función que VTK llama al recibir un evento. Su argumento `void*` transporta la dirección de `EstadoInterfaz`, recuperada mediante `static_cast`.
+- Un callback es una función llamada al recibir un evento. `eventoTrack` sigue la firma de los ejemplos de clase; la lectura de cada barra se realiza con `getTrackbarPos`. En VTK, `eventoVista3D` recibe un `void*` con la dirección del visor para cerrarlo con Esc.
 - RAII libera recursos al destruir el objeto: archivos, imágenes y `unique_ptr` tienen dueño. `RecursosProceso` cierra la consulta PDH y prohíbe copiarse para evitar dos dueños del mismo identificador.
 - `throw` comunica errores; `try/catch` los muestra y devuelve código 1. `#pragma once` evita incluir dos veces una cabecera; `inline` permite definir sus funciones en ella sin duplicar definiciones al enlazar.
 
@@ -48,22 +48,24 @@ Las construcciones nuevas tienen una función concreta:
 
 ## 3. Parámetros y controles
 
-`Parametros::validar` rechaza valores fuera de rango antes de procesar. Las comparaciones escritas como `!(valor >= mínimo && valor <= máximo)` también rechazan NaN. `ajustarParametro` limita cada cambio con `clamp`.
+`Parametros::validar` rechaza valores fuera de rango antes de procesar. Las comparaciones escritas como `!(valor >= mínimo && valor <= máximo)` también rechazan NaN. `crearControles` usa `createTrackbar`, `setTrackbarMin` y `setTrackbarPos` para definir los límites y valores iniciales de las barras.
 
-| Parámetro | Inicial | Rango | Paso del panel |
+| Parámetro | Inicial | Rango | Paso del slider |
 | --- | --- | --- | --- |
-| `umbral` | 40 | 0..255 | 5 |
+| `umbral` | 40 | 0..255 | 1 |
 | `tamGauss` | 5 | impares 3..51 | 2 |
-| `sigma` | 1,73 | 0,1..10 | 0,25 |
-| `pesoPropio` | 0,3 | 0..1 | 0,05 |
-| `diagonal` | 1 | 0..3 | 0,25 |
-| `radioPuntos` | 2 | 0..3 | 1 |
-| `niveles` | 6 | 2..16 | 1 |
-| `saturacion` | 1,25 | 0..3 | 0,05 |
-| `brillo` | 1,05 | 0..3 | 0,05 |
-| `neon` | 1,15 | 0..3 | 0,05 |
+| `sigma` | 1,73 | 0,1..10 | 0,01 |
+| `pesoPropio` | 0,3 | 0..1 | 0,01 |
+| `diagonal` | 1 | 0..3 | 0,01 |
+| `radioPuntos` | 1 | 0..3 | 1 |
+| `niveles` | 8 | 2..16 | 1 |
+| `saturacion` | 1,25 | 0..3 | 0,01 |
+| `brillo` | 1,00 | 0..3 | 0,01 |
+| `neon` | 1,15 | 0..3 | 0,01 |
 | `desplazamiento` | 1 | 0..3 píxeles | 1 |
-| `contraste` | 2 | 0,1..8 | 0,25 |
+| `contraste` | 1,5 | 0,1..8 | 0,01 |
+
+Las barras `x100` se dividen entre 100. El porcentaje de peso propio también se divide entre 100. `Kernel` muestra el tamaño Gaussiano directamente. Si se selecciona un par, `leerControles` lo compara con el tamaño anterior y mueve la barra al impar vecino en la dirección del ajuste.
 
 `--kernel` modifica el tamaño del Gaussiano. El kernel propio permanece de 3×3; `--diagonal` modifica sus pesos. La línea de comandos también permite establecer sigma y peso propio; los otros parámetros visuales se ajustan en la ventana.
 
@@ -120,7 +122,9 @@ La LUT `tabla` tiene 256 entradas:
 Q(i) = sat8(round(i·(niveles-1)/255) · 255/(niveles-1))
 ```
 
-Con seis niveles genera 0, 51, 102, 153, 204 y 255 por canal. `LUT(mediana, tabla, comic)` reduce la gradación antes de añadir la tinta y el neón.
+Con ocho niveles genera 0, 36, 73, 109, 146, 182, 219 y 255 por canal. `LUT(mediana, tabla, comic)` reduce la gradación antes de añadir la paleta, las texturas, la tinta y el neón.
+
+`aplicarPaleta` utiliza el gris previo a la cuantización para seleccionar dos regiones. En gris 25..120 mezcla el 75 % del color cuantizado con el 25 % de BGR `(150,55,95)`, un azul-violeta. En gris 175..245 mezcla el 90 % del color con el 10 % de BGR `(90,195,245)`, un tono cálido. `addWeighted` realiza las sumas y `copyTo` limita cada resultado a su máscara. Las regiones intermedias y los extremos quedan fuera de ambas máscaras.
 
 `aplicarTrama` conserva el dibujo de círculos del original y evita recorrer cada píxel desde C++. Divide la imagen en celdas de ocho píxeles, muestreadas en `(8c+4, 8f+4)`. Para brillo `I` y radio máximo `R`:
 
@@ -128,9 +132,11 @@ Con seis niveles genera 0, 51, 102, 153, 204 y 255 por canal. `LUT(mediana, tabl
 r = round((255-I)·R/255)
 ```
 
-Una celda oscura produce un círculo mayor. Una baldosa 8×8 almacena el menor radio que incluye cada píxel, utilizando `circle` para conservar su rasterización exacta. `repeat` extiende esa baldosa; `warpAffine` con `muestreo` y `WARP_INVERSE_MAP` recoge los centros; `resize` con vecino más próximo replica cada brillo en su celda. `convertTo` calcula radios y `compare(CMP_GE)` crea `puntos`, la máscara negra.
+Una celda oscura produce un círculo mayor. Una baldosa 8×8 almacena el menor radio que incluye cada píxel, utilizando `circle` para conservar su rasterización exacta. `repeat` extiende esa baldosa; `warpAffine` con `muestreo` y `WARP_INVERSE_MAP` recoge los centros; `resize` con vecino más próximo replica cada brillo en su celda. `convertTo` calcula radios y `compare(CMP_GE)` crea `puntos`. Se intersecta con una máscara de gris 70..180. En los puntos seleccionados se usa `Csalida = sat8(0,65·Centrada)`, equivalente a mezclar tinta negra con opacidad del 35 %.
 
-Se usan divisiones redondeadas hacia arriba para cubrir celdas parciales. Si su centro queda fuera, el muestreo recibe blanco 255 y genera radio cero: coincide con el bucle original, que no dibujaba ese centro. Los círculos válidos se recortan al borde de la imagen. Radio cero desactiva la trama.
+Se usan divisiones redondeadas hacia arriba para cubrir celdas parciales. Si su centro queda fuera, el muestreo recibe blanco 255 y genera radio cero. Los círculos válidos se recortan al borde de la imagen. Radio cero desactiva los puntos.
+
+`aplicarRayado` dibuja una diagonal de un píxel en una baldosa 8×8 y la repite. Las posiciones seleccionadas cumplen `x mod 8 = y mod 8`. Su intersección con gris 0..69 limita el rayado a sombras profundas. En esas posiciones aplica `Csalida = sat8(0,70·Centrada)`, equivalente a tinta negra con opacidad del 30 %. El patrón se conserva entre fotogramas y se reconstruye al cambiar la resolución. Los contornos se pintan después de la paleta y las texturas, de modo que siguen siendo negros. El rayado se mantiene al llevar el radio de puntos a cero.
 
 ### Neón y separación de canales
 
@@ -181,13 +187,13 @@ Los valores anteriores empiezan en -1 para obligar a preparar cada caché en su 
 
 `crearCarpetaPadre` prepara la carpeta de salida. `abrirCSV` sobrescribe benchmarks y añade registros en vivo, escribiendo cabecera cuando corresponde. `campoCSV` entrecomilla texto y duplica sus comillas internas. `escribirFila` guarda parámetros, etapa, tiempos, recursos y dispositivo; deja CPU/GPU vacíos si no hay muestra válida y comprueba errores de escritura. Al pulsar B, el registro se guarda en `resultados/mediciones_en_vivo.csv`; en comparación se escribe una fila CPU y otra OpenCL por fotograma. `capturarClip` guarda fotogramas originales en MJPG con metadato de 30 FPS, sin medir con ello la cadencia física de la cámara.
 
-En [Interfaz.hpp](../Interfaz.hpp), `numero` formatea decimales. `EstadoInterfaz` conserva parámetros, modo, etapa, selección, disponibilidad y órdenes de salir/registrar/restaurar. `dibujarControles` dibuja doce filas en dos columnas y guarda los rectángulos de cada botón. `eventoTeclado` sólo atiende pulsaciones `KEY_DOWN`; arriba/abajo seleccionan y derecha/izquierda ajustan. Espacio recorre CPU→UMat→comparación, Tab recorre cinco etapas, B alterna CSV, R restaura la vista y Esc/q salen.
+En [Interfaz.hpp](../Interfaz.hpp), `numero` formatea decimales. `EstadoInterfaz` conserva parámetros, modo, etapa, disponibilidad y órdenes de salir/registrar. `crearControles` crea doce sliders una sola vez; `leerControles` lee sus posiciones mediante `getTrackbarPos`. `eventoTeclado` recibe el resultado de `waitKey`: Espacio recorre CPU→UMat→comparación, T recorre cinco etapas, B alterna CSV y Esc/q salen.
 
-`eventoRaton` reconoce clic izquierdo. VTK entrega Y desde abajo; la imagen del panel usa Y desde arriba. Por eso convierte `yImagen=altoVentana-1-yVTK` y resta la esquina del panel antes de probar `Rect::contains`. Esto mantiene los botones alineados al redimensionar.
+`visualizar` abre `Lienzo` con `WINDOW_AUTOSIZE`, como en el Ejemplo 7. Convierte las etapas grises a BGR y copia las dos vistas con `copyTo` a rectángulos fijos de `lienzo`, siguiendo el Ejemplo 6. `imshow` presenta esa matriz junto con las barras nativas de OpenCV.
 
-`visualizar` crea una única `Viz3d` con dos `WImage3D`: original a la izquierda y efecto a la derecha. Son imágenes como texturas en planos 3D, no reconstrucción de profundidad. La pose combina orientación y traslación de la cámara virtual; las normales y vectores verticales orientan los planos. Arrastrar permite inspeccionar la escena; textos y panel son superposiciones de pantalla.
+V llama a `mostrarVista3D`, que crea una `Viz3d` con dos `WImage3D` del fotograma actual: original a la izquierda y efecto a la derecha. Son texturas en planos 3D, sin reconstrucción de profundidad. La pose y las normales orientan los planos. `spin` atiende la inspección interactiva; arrastrar rota la escena y R vuelve a encuadrarla. Q o Esc cierran esta vista y reanudan el video. El video queda pausado mientras se inspecciona el fotograma.
 
-Cada vuelta captura, toma una copia de parámetros/etapa, procesa, actualiza texturas, recursos y controles, y llama `spinOnce` para renderizar y atender eventos. El CSV utiliza esa copia anterior a los eventos para etiquetar correctamente el fotograma ya medido. `--smoke` cierra tras el límite pedido y guarda una captura; terminar antes es un error.
+Cada vuelta captura, lee sliders, toma una copia de parámetros/etapa, procesa, actualiza la comparación y llama `waitKey` para atender eventos. El CSV utiliza esa copia anterior a los eventos para etiquetar correctamente el fotograma medido. `--smoke` procesa el límite de fotogramas y guarda una captura VTK del último; inicializa el interactor una vez con `spinOnce` antes de guardarla. Terminar antes del límite es un error.
 
 `main` interpreta argumentos, valida cantidad 1..10000 y tamaño 8..3840 por 8..2160, abre la fuente y elige captura, benchmark o visualización. El benchmark exige video fijo, un solo modo por proceso y rebobinado válido. Rechaza una salida que identifique el mismo archivo de entrada, y la captura rechaza videos que ya existen para conservar las pruebas anteriores. `--help` explica opciones; las excepciones terminan con un mensaje y código de error.
 
@@ -244,7 +250,7 @@ Para comparar otra carga, repite los comandos con `--kernel=31` y nombres de sal
 
 La carpeta `resultados` no es necesaria para compilar: el programa la crea al grabar un clip o escribir mediciones. Sus CSV son datos generados; `Mediciones.hpp` y `Mediciones.cpp` son código necesario para compilar. Conserva los CSV que utilices como evidencia en el informe.
 
-Referencia histórica del desarrollo, 120 muestras por caso, OpenCV 5.0.0 Release, AMD Ryzen 9 7845HX y NVIDIA GeForce RTX 4070 Laptop GPU con controlador 617.42. Estas cifras están anotadas aquí; antes de defenderlas, conserva los CSV de tu propia ejecución:
+Referencia histórica del desarrollo, anterior a la incorporación de paleta y rayado, con 120 muestras por caso, OpenCV 5.0.0 Release, AMD Ryzen 9 7845HX y NVIDIA GeForce RTX 4070 Laptop GPU con controlador 617.42. Las nuevas etapas cambian el trabajo medido. Repite las mediciones de la versión actual y conserva sus CSV antes de utilizar cifras en el informe.
 
 | Modo | Gauss | Filtro medio ms | Proceso medio ms | FPS proceso | RAM máxima MiB |
 | --- | --- | --- | --- | --- | --- |
@@ -267,7 +273,7 @@ Otra ejecución de referencia registró 600 muestras a 1280×720 con Gauss 31, s
 2. **Hasta el minuto 2:** recorrer CLAHE, mediana, Gaussiano, Sobel, kernel de suma cero, cuantización, puntos, HSV y glitch. Mostrar las cinco etapas y variar umbral/peso diagonal.
 3. **Minuto 2 a 3:** explicar que la plantilla comparte algoritmo Mat/UMat y que `finish` permite medir trabajo terminado. Comparar filtro frente a recorrido completo.
 4. **Minuto 3 a 4:** mostrar los CSV de tus mediciones con Gauss 5/31 y explicar los límites de RAM, motor GPU y FPS. Explicar un caso donde las transferencias cambian la conclusión.
-5. **Cierre hasta el minuto 5:** mostrar un botón, rotación/restauración VTK y registro en vivo. Delimitar el alcance de escritorio.
+5. **Cierre hasta el minuto 5:** mostrar un slider, abrir VTK con V, rotar el fotograma y regresar al video. Mostrar el registro en vivo y delimitar el alcance de escritorio.
 
 ## 10. Veinte preguntas probables
 
@@ -279,7 +285,7 @@ Otra ejecución de referencia registró 600 muestras a 1280×720 con Gauss 31, s
 6. **¿Qué modifica sigma?** La dispersión de los pesos Gaussianos; el tamaño determina cuántos vecinos se consideran.
 7. **¿Calculas magnitud euclídea de Sobel?** Uso la combinación ponderada de derivadas absolutas saturadas mostrada en el código.
 8. **¿Por qué `CV_16S` y `CV_32F`?** Conservan signos y precisión antes de convertir las respuestas a ocho bits.
-9. **¿Seis niveles significan seis colores?** Son seis intensidades por canal antes de las transformaciones posteriores.
+9. **¿Ocho niveles significan ocho colores?** Son ocho intensidades por canal antes de las transformaciones posteriores.
 10. **¿Cómo decides el radio de un punto?** Muestreo el centro de su celda y redondeo `(255-I)·R/255`.
 11. **¿Por qué vectorizar la trama?** Para expresar el trabajo con operaciones OpenCV que aceptan Mat y UMat, conservando círculos y bordes comprobados.
 12. **¿Por qué dos LUT sobre V?** La primera puede recortar valores; conservar ambas mantiene redondeo y saturación secuenciales.
@@ -296,7 +302,7 @@ Otra ejecución de referencia registró 600 muestras a 1280×720 con Gauss 31, s
 
 - Compilar con la aplicación cerrada y comprobar que la terminal identifique la NVIDIA al activar OpenCL.
 - Abrir cámara y verificar original vertical, a la izquierda, junto al efecto; disponer del video fijo como alternativa.
-- Probar un botón de cada columna, flechas, Espacio, Tab y R; arrastrar la escena y restaurarla.
+- Probar sliders, Espacio y T; abrir la vista con V, rotarla, encuadrarla con R y volver al video con Q o Esc.
 - Cambiar umbral, peso propio, diagonal y tamaño Gaussiano explicando qué operación se modifica.
 - Pulsar B, variar un parámetro, detener B y revisar que el CSV conserve parámetros y etapa de cada fotograma.
 - Tener abiertos código, ejemplos de clase y tus CSV de mediciones. Interpretar celdas vacías como falta de muestra y distinguir filtro, proceso y ventana.
