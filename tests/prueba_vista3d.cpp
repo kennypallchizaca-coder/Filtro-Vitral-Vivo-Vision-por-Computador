@@ -2,11 +2,25 @@
 #undef NDEBUG
 #endif
 #include "Vista3D.hpp"
+#include "Interfaz.hpp"
 #include <cassert>
 #include <iostream>
+#include <opencv2/highgui.hpp>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 
 using namespace cv;
 using namespace std;
+
+BOOL CALLBACK contarVentanas(HWND ventana, LPARAM datos) {
+    DWORD proceso = 0;
+    GetWindowThreadProcessId(ventana, &proceso);
+    if (proceso == GetCurrentProcessId() && IsWindowVisible(ventana))
+        ++*reinterpret_cast<int*>(datos);
+    return TRUE;
+}
 
 Vec3b colorCentro(Vista3D& vista, double xMundo) {
     Point3d punto;
@@ -31,7 +45,7 @@ int main() {
         Vec3b despues = colorCentro(vista, -0.98);
         assert(despues[1] > 200 && despues[2] < 40);
         assert(colorCentro(vista, 0.98)[1] > 200);
-        // The same scene must accept a new texture without resetting its camera.
+        // La misma escena debe aceptar una textura nueva sin reiniciar su cámara.
         Affine3d pose = vista.visor.getViewerPose();
         assert(vista.actualizar(rojo, verde));
         assert(colorCentro(vista, -0.98)[2] > 200);
@@ -49,6 +63,42 @@ int main() {
         assert(reabierta.actualizar(verde, rojo));
         assert(colorCentro(reabierta, -0.98)[1] > 200);
         assert(colorCentro(reabierta, 0.98)[2] > 200);
+    }
+    {
+        namedWindow("Panel prueba", WINDOW_AUTOSIZE);
+        crearControles("Panel prueba", Parametros());
+        assert(getTrackbarPos("Transformacion %", "Panel prueba") == 100);
+        imshow("Panel prueba", Mat(380, 800, CV_8UC3, Scalar::all(240)));
+        waitKey(1);
+        Vista3D vista(rojo, verde);
+        assert(vista.actualizar(rojo, verde));
+        vista.integrar("Panel prueba", Rect(0, 80, 800, 300), Size(800, 380));
+        assert(vista.actualizar(rojo, verde));
+        assert(GetParent(vista.panel) == vista.padre);
+        assert(GetWindowLongPtr(vista.panel, GWL_STYLE) & WS_CHILD);
+        Rect marco = getWindowImageRect("Panel prueba");
+        RECT panel{};
+        assert(GetWindowRect(vista.panel, &panel));
+        assert(abs(panel.left - marco.x) <= 1);
+        assert(abs(panel.top - (marco.y + cvRound(80.0 * marco.height / 380))) <= 1);
+        assert(abs((panel.right - panel.left) - marco.width) <= 1);
+        assert(abs((panel.bottom - panel.top) - cvRound(300.0 * marco.height / 380)) <= 1);
+        int visibles = 0;
+        EnumWindows(contarVentanas, reinterpret_cast<LPARAM>(&visibles));
+        assert(visibles == 1);
+        assert(colorCentro(vista, -0.98)[2] > 200);
+        assert(colorCentro(vista, 0.98)[1] > 200);
+        setTrackbarPos("Kernel", "Panel prueba", 7);
+        assert(getTrackbarPos("Kernel", "Panel prueba") == 7);
+        setTrackbarPos("Transformacion %", "Panel prueba", 50);
+        Mat barrido = verde.clone();
+        aplicarBarrido(rojo, barrido, getTrackbarPos("Transformacion %", "Panel prueba"));
+        assert(vista.actualizar(rojo, barrido));
+        assert(colorCentro(vista, 0.45)[1] > 200);
+        assert(colorCentro(vista, 1.45)[2] > 200);
+        // Cerrar la ventana principal debe liberar OpenGL antes de destruir su hija.
+        SendMessage(vista.padre, WM_CLOSE, 0, 0);
+        assert(vista.visor.wasStopped());
     }
     cout << "VTK: textura roja/verde actualizada, pose conservada y reapertura correcta\n";
 }

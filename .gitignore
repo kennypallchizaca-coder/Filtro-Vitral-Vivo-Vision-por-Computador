@@ -14,10 +14,6 @@
 /respaldo/
 /docs/superpowers/
 
-/resultados/*
-!/resultados/cpu_k5.csv
-!/resultados/gpu_k5.csv
-!/resultados/cpu_k31.csv
-!/resultados/gpu_k31.csv
-!/resultados/gpu_carga.csv
-!/resultados/resumen.csv
+/resultados/
+/odd/
+/.atl/

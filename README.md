@@ -1,6 +1,6 @@
 # Filtro-Spiderman-Vision-por-Computador
 
-Aplicación de escritorio en C++17 y OpenCV que transforma video de cámara o archivo en un efecto cómic inspirado en *Spider-Man: Un nuevo universo*. Combina colores planos, sombras azul-violeta, luces cálidas, puntos halftone, rayado diagonal, contornos negros, tonos neón y una separación RGB suave. La ventana OpenCV contiene el original, los controles deslizantes y las mediciones. El video original y el resultado se muestran como texturas dinámicas en VTK, que se abre al iniciar; `V` permite ocultarlo o reabrirlo.
+Aplicación de escritorio en C++17 y OpenCV que transforma video de cámara o archivo en un efecto cómic inspirado en *Spider-Man: Un nuevo universo*. Combina colores planos, sombras azul-violeta, luces cálidas, puntos halftone, rayado diagonal, contornos negros, tonos neón y una separación RGB suave. Una sola ventana blanca contiene original y efecto, controles deslizantes y mediciones. La comparación se muestra como textura dinámica en un panel VTK integrado, sin abrir otra ventana.
 
 ## Cómo funciona el filtro
 
@@ -57,9 +57,9 @@ En HSV, la máscara de neón selecciona H entre 90 y 170 y S mayor que 50. Se re
 
 La plantilla `Efecto<Imagen>` contiene una sola secuencia de procesamiento: se instancia con `Mat` para CPU y con `UMat` para la ruta OpenCL. `UMat` permite utilizar la GPU en las operaciones compatibles; algunas pueden ejecutarse en CPU según el soporte disponible.
 
-La ventana de control usa `Lienzo` con `WINDOW_AUTOSIZE`, como el Ejemplo 7. El original se copia con `copyTo` a una región fija de un `Mat`, siguiendo los Ejemplos 6 y 7. El resultado procesado se presenta en VTK, no se duplica como salida 2D. Las barras se crean con `createTrackbar` y se leen con `getTrackbarPos`, como en el Ejemplo 3.
+La ventana usa `Lienzo` con `WINDOW_AUTOSIZE`, como el Ejemplo 7. Original y efecto se copian con `copyTo` a dos regiones `Rect` de un mismo `Mat`, siguiendo los Ejemplos 6 y 7. Las barras se crean con `createTrackbar` y se leen con `getTrackbarPos`, como en el Ejemplo 3.
 
-Al iniciar, VTK muestra el video original y procesado como texturas sobre dos planos de una escena 3D. `setImage` actualiza ambas texturas en cada vuelta y `spinOnce` atiende eventos sin detener el ciclo de cámara. No se reconstruyen los widgets ni se restablece su cámara entre fotogramas. Arrastrar permite rotar la escena y `R` vuelve a encuadrarla; `Q` o Esc cierran solamente la vista 3D. `V` permite ocultarla o reabrirla. Los planos no reconstruyen la profundidad de la escena capturada.
+Ese `Mat` se aplica como textura a un plano `WImage3D`. `setImage` la actualiza en cada vuelta y `spinOnce` atiende eventos sin detener el ciclo de cámara. El visor VTK real se integra como ventana hija de `Lienzo` mediante las API nativas de Windows; no se reemplaza por una captura de pantalla. Este puente no procede de los ejemplos del profesor. No se reconstruye el widget ni se restablece su cámara entre fotogramas. Arrastrar permite rotar la escena y `R` vuelve a encuadrarla. Esc o cerrar `Lienzo` termina toda la aplicación. El plano no reconstruye la profundidad de la escena capturada.
 
 ## Compilar y ejecutar
 
@@ -84,27 +84,33 @@ Después de esa configuración, `build` queda en Release. Cierra la ventana con 
 
 Sin argumentos se abre la cámara 0 a 640×480 y se comparan CPU y OpenCL si se encuentra la GPU configurada; si no, se continúa en CPU. La selección predeterminada es `NVIDIA:GPU:RTX 4070`, modificable con `--device`. `--mode=gpu` exige una GPU compatible; `--mode=cpu` omite su selección. Todas las opciones aparecen con `.\build\interciclo_vision.exe --help`.
 
+## Transformación de realidad a cómic
+
+La barra **Transformacion %** revela el efecto de izquierda a derecha en el panel procesado: **0** muestra la imagen real, **50** mitad cómic y mitad real, y **100** el efecto completo. Al iniciar está en 100. El panel original permanece intacto; las etapas intermedias tampoco cambian. Se calcula siempre el filtro completo: el barrido no reduce artificialmente la carga ni los tiempos del filtro. `aplicarBarrido` usa `Rect` y `copyTo`, como los lienzos de clase.
+
+El acabado aplica mediana a la máscara de tinta, limita los puntos a luminosidad 70–155 y oscurece esos puntos solo un 20 %. El rayado actúa entre 25–69. El desplazamiento RGB se copia únicamente cerca de los contornos; fuera de esa máscara conserva los colores. Son ajustes del mismo pipeline, no detección facial ni realidad aumentada.
+
 ## Controles
 
 - Sliders: ajustar los parámetros del efecto con el ratón.
 - Espacio: CPU Mat, OpenCL UMat y comparación de ambos sobre el mismo fotograma.
 - `T`: efecto final, gris, Gaussiano, respuesta del kernel propio y máscara de contornos.
-- `V`: abrir/cerrar la vista 3D del video en vivo. Dentro de ella: arrastrar para rotar, `R` para encuadrar y `Q` o Esc para cerrar esa vista sin detener el video.
-- `B`: activar/desactivar el CSV en vivo. `Esc` o `q` minúscula: salir.
+- Arrastrar sobre las imágenes: girar la comparación 3D. `R`: restaurar su encuadre.
+- `Esc` o `q` minúscula: salir.
 
 Los controles incluyen umbral, tamaño y sigma de Gaussiano, peso del filtro propio, diagonal del kernel, radio de puntos, niveles de color, saturación, brillo, neón, desplazamiento RGB y CLAHE. El tamaño Gaussiano siempre es impar entre 3 y 51.
 
 La barra `Kernel` muestra el tamaño del Gaussiano entre 3 y 51. Cuando se selecciona un número par, la barra avanza al impar vecino en la dirección del ajuste. En las barras `x100`, 125 corresponde a 1,25. `Peso propio %` muestra el porcentaje aplicado al filtro propio.
 
-El registro en vivo se guarda en `resultados/mediciones_en_vivo.csv`. Para alternar CPU/OpenCL/comparación con Espacio, inicia con `--mode=both` (predeterminado) y OpenCL disponible.
+Los resultados se muestran en vivo; no se guardan mediciones ni se exporta CSV. Para alternar CPU/OpenCL/comparación con Espacio, inicia con `--mode=both` (predeterminado) y OpenCL disponible.
 
 ## Archivos del proyecto
 
 | Archivo | Responsabilidad |
 |---|---|
-| `Principal.cpp` | Cámara/video, comparación, selección OpenCL, tiempos, CSV, benchmark y vista VTK opcional. |
+| `Principal.cpp` | Cámara/video, comparación, selección OpenCL, tiempos en vivo y vista VTK. |
 | `Principal.hpp` | Parámetros y el mismo algoritmo compilado para Mat y UMat. |
-| `Vista3D.hpp` | Dos planos VTK que actualizan sus texturas sin reiniciar la cámara de la escena. |
+| `Vista3D.hpp` | Composición de ambas imágenes y visor VTK integrado en Lienzo, sin reiniciar su cámara. |
 | `Interfaz.hpp` | Crear y leer trackbars, convertir sus valores a parámetros y gestionar las teclas. |
 | `Mediciones.hpp/.cpp` | RAM del proceso y contadores CPU/GPU de Windows. |
 
@@ -112,47 +118,23 @@ La base de procesamiento adapta los ejemplos de clase 3 (HSV/Lab), 5 (CLAHE y me
 
 La integración con la versión Android de la Parte I se describe en [docs/ANDROID.md](docs/ANDROID.md).
 
-## Mediciones reproducibles
+## Mediciones en pantalla
 
-El video de entrada se graba localmente y no se incluye en Git. Graba primero tu propio clip con la cámara:
+La interfaz muestra tiempos CPU y OpenCL, transferencias GPU, FPS del ciclo visible, RAM del proceso y muestras de CPU/GPU de Windows. La opción de comparación procesa el mismo fotograma con los mismos parámetros.
 
-```powershell
-.\build\interciclo_vision.exe --capture=resultados/entrada.avi --frames=120 --mode=cpu
-```
+- Los tiempos OpenCL esperan `ocl::finish()`, no solo el envío del trabajo.
+- RAM es el Working Set del proceso, no VRAM. La comparación conserva búferes de ambas rutas.
+- El contador GPU del proceso incluye VTK, incluso si el filtro usa CPU; no aísla cómputo OpenCL.
+- Una raya indica una ruta no ejecutada o una muestra aún no disponible.
+- El FPS de ventana incluye captura, procesamiento y presentación; no es lo mismo que la capacidad del filtro.
 
-La captura devuelve un error si el archivo de destino ya existe; elige un nombre nuevo para conservarlo. Las mediciones se ejecutan directamente con el mismo `.exe`, usando los mismos fotogramas y procesos separados para CPU y OpenCL:
-
-```powershell
-.\build\interciclo_vision.exe --benchmark --source=resultados/entrada.avi --mode=cpu --frames=120 --kernel=5 --output=resultados/cpu_k5_nuevo.csv
-.\build\interciclo_vision.exe --benchmark --source=resultados/entrada.avi --mode=gpu --frames=120 --kernel=5 --output=resultados/gpu_k5_nuevo.csv
-.\build\interciclo_vision.exe --benchmark --source=resultados/entrada.avi --mode=cpu --frames=120 --kernel=31 --output=resultados/cpu_k31_nuevo.csv
-.\build\interciclo_vision.exe --benchmark --source=resultados/entrada.avi --mode=gpu --frames=120 --kernel=31 --output=resultados/gpu_k31_nuevo.csv
-```
-
-Cada proceso trabaja a 640x480, calienta al menos 15 fotogramas y 1,1 segundos y vuelve al inicio del video antes de las muestras. Guarda 120 muestras por combinación y muestra las medias y la mediana en la terminal. Estos comandos guardan muestras individuales; no generan un `resumen.csv`. Para grabar otro video, elige un nombre nuevo con `--capture=resultados/nueva_entrada.avi` y utiliza esa ruta en `--source`.
-
-`resultados` es una carpeta de datos generados y no es necesaria para compilar o abrir la cámara. Si falta, el programa la crea al guardar videos o mediciones. El rendimiento depende del equipo, la resolución, los parámetros y la carga de otros procesos; la comparación utiliza el mismo clip en ambos modos.
-
-## Cómo interpretar las cifras
-
-- `ms_filtro`: solamente el efecto. OpenCL se sincroniza con `ocl::finish()`.
-- `ms_subida` y `ms_bajada`: transferencias entre Mat y UMat, medidas por separado.
-- `ms_proceso`: filtrado más transferencias; para CPU coincide con filtrado.
-- `ms_ciclo`: lectura, ajuste de resolución y procesamiento; en el registro en vivo incluye la comparación, los eventos de HighGUI y la actualización VTK cuando está abierta. El benchmark no abre ventanas.
-- `fps_proceso`: 1000/ms_proceso; es capacidad de procesamiento. `FPS ventana` incluye el recorrido visible y puede estar limitado por la cámara.
-- RAM: Working Set del proceso en MiB. No representa VRAM; el proceso en vivo conserva los búferes de ambos modos.
-- CPU: porcentaje del proceso normalizado a los procesadores lógicos, muestreado por intervalos.
-- GPU: máximo de los motores de este proceso disponibles en PDH. En vivo incluye cómputo y renderizado. Una celda vacía significa que falta una muestra disponible; cero es un valor medido.
-
-Los CSV generados por la aplicación usan punto decimal. En el modo de comparación, las filas CPU y OpenCL de un mismo fotograma comparten el tiempo de ciclo y los recursos del proceso; usa benchmarks separados para comparar cada modo.
-
-Las salidas CPU y OpenCL pueden diferir por redondeos: una diferencia pequeña cerca del umbral puede cambiar la máscara de contornos. Compartir el algoritmo no garantiza igualdad de todos los píxeles.
+`--benchmark --source=entrada.avi --mode=cpu` sigue permitiendo una comprobación sin ventanas, pero imprime solo un resumen en consola. `--output` se reserva para una captura PNG de la prueba `--smoke`; no se usa para guardar mediciones.
 
 ## Informe y comprobaciones de Parte I
 
 - [Informe con esquema, matemática, gráficas y referencias](docs/INFORME_PARTE_I.html). Se abre en un navegador y se puede imprimir a PDF.
-- [CSV y metadatos de las mediciones](docs/mediciones/metadatos.json): seis casos CPU/OpenCL, 120 muestras por caso y kernels 5, 31 y 51 sobre el mismo clip sintético. No son mediciones del teléfono ni de la cámara en vivo.
+- [Datos históricos y metadatos del informe](docs/mediciones/metadatos.json): seis casos CPU/OpenCL, 120 muestras por caso y kernels 5, 31 y 51 sobre el mismo clip sintético. No son mediciones del teléfono ni de la cámara en vivo.
 - [Guion del videoblog en inglés](docs/GUION_VIDEO_EN.md). La grabación la realizará el usuario; el guion no sustituye al video.
-- `tests/prueba_vista3d.cpp` verifica texturas dinámicas, pose y reapertura mediante renderizado real. Se habilita con `-DBUILD_TESTING=ON` al configurar CMake y se ejecuta con `ctest --test-dir build --output-on-failure`; no es necesario para abrir la aplicación.
+- `tests/prueba_vista3d.cpp` verifica texturas dinámicas, pose, reapertura, integración en una sola ventana, posición del panel, trackbars y cierre del padre mediante renderizado real. Se habilita con `-DBUILD_TESTING=ON` al configurar CMake y se ejecuta con `ctest --test-dir build --output-on-failure`; no es necesario para abrir la aplicación.
 
 En los benchmarks sin ventanas, PDH devolvió 0 % de motor GPU incluso bajo carga; en vivo sí registró actividad, pero incluye el renderizado VTK. No lo interpretes como una medición aislada del filtro: `nvidia-smi --query-gpu=utilization.gpu,memory.used,power.draw --format=csv -l 1` permite observar la GPU completa mientras corre OpenCL. Se registró hasta 23 % en la prueba documentada; ese dato es global del dispositivo, no exclusivo del filtro.

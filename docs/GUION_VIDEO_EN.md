@@ -50,9 +50,9 @@ Edges are calculated before the dots and lines are drawn. Otherwise, the texture
 
 [Show the sliders and resource readings. Rotate the VTK scene while the video changes.]
 
-The desktop window provides twelve sliders, the original image and resource measurements. The processed video is displayed as a dynamic texture in VTK, rather than as the final output of a normal two-dimensional window.
+One white desktop window contains twelve sliders, resource measurements and both images. A real VTK viewport is embedded in this window, so the processed video is still a dynamic 3D texture rather than a screenshot copied into a two-dimensional display.
 
-There are two textured planes: original and processed video. Their images update on every loop. The program keeps the same scene and camera pose, so rotating the scene does not reset the view on the next frame. These are textured planes, not a three-dimensional reconstruction of the person.
+Following the classroom examples, copyTo places the original and processed images in two rectangular regions of one Mat. This combined image is the texture of one plane. It updates on every loop. The program keeps the same scene and camera pose, so rotating it does not reset the view on the next frame. R restores the initial view, and Escape closes the application. This is a textured plane, not a three-dimensional reconstruction of the person.
 
 The Gaussian kernel size changes the computational load. It is always an odd number. Other controls change sigma, the custom response weight, the threshold, the color settings and the printed texture.
 
@@ -62,7 +62,7 @@ The Gaussian kernel size changes the computational load. It is always an odd num
 
 The CPU version uses Mat. The OpenCL version uses UMat and enables OpenCL explicitly. A shared template avoids writing the effect twice.
 
-OpenCL work can be asynchronous, so the program waits for completion before reading its timers. The desktop CSV separates upload, filtering and download time. It also records process RAM and system-resource samples.
+OpenCL work can be asynchronous, so the program waits for completion before reading its timers. The desktop interface separates upload, filtering and download time. It also records process RAM and system-resource samples.
 
 For the report, the two modes processed the same controlled synthetic video in separate processes, with the same parameters and warm-up procedure. The charts report measured results, not an assumed speedup.
 
@@ -76,7 +76,7 @@ On Android, Kotlin manages the camera, controls and lifecycle. JNI connects the 
 
 The camera supplies RGBA images. C++ converts them to BGR for processing and returns RGBA with the original dimensions. The comparison fits both complete images without stretching or cropping them.
 
-The application displays timing, preview FPS, process CPU and memory. It can collect paired CPU and GPU measurements and export a CSV using Android's file picker. If an actual GPU route is unavailable, the interface reports the CPU fallback instead of inventing GPU results.
+The application displays timing, preview FPS, process CPU and memory. Both routes are timed on the same frame, and their measurements stay on screen. No results are recorded or exported. If an actual GPU route is unavailable, the interface reports the CPU fallback instead of inventing GPU results.
 
 The desktop measurements in this report are not measurements of this phone.
 
@@ -89,3 +89,11 @@ This project combines familiar classroom operations with a parameterized custom 
 The main lessons are to reuse the same mathematics, measure completed work, include transfer costs, and describe the limits of each measurement. The report identifies the adapted classroom examples, published references, library documentation and development assistance.
 
 Thank you.
+
+## Optional live sweep demonstration
+
+[Select the final comparison. Set Transformation to zero, then slowly move it to one hundred while moving in front of the camera. On desktop, rotate the VTK plane afterward.]
+
+The transformation slider reveals the comic from left to right. Zero shows the real image, fifty shows half comic and half real, and one hundred shows the complete effect. The original comparison panel remains unchanged. We use rectangular regions and copyTo, following our classroom examples. Both processing routes still calculate the whole effect, so this slider does not create a false speedup. Intermediate views are not affected.
+
+The printed dots are lighter, the ink mask is cleaned with a median filter, and RGB displacement is limited to the edges. This is image processing, not augmented reality or face recognition.

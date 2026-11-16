@@ -18,14 +18,15 @@ inline string numero(double valor, int decimales = 2) {
 struct EstadoInterfaz {
     Parametros parametros;
     int modo = 2, etapa = 0;
-    bool gpuDisponible = false, salir = false, registrar = false;
+    bool gpuDisponible = false, salir = false;
 };
 
 inline void eventoTrack(int, void*) {
 }
 
+// Crea las barras y sus valores iniciales, siguiendo los Ejemplos 3 y 7.
 inline void crearControles(const string& ventana, const Parametros& p) {
-    // Los Ejemplos 3 y 7 crean las barras y luego asignan sus posiciones iniciales.
+    createTrackbar("Transformacion %", ventana, nullptr, 100, eventoTrack, nullptr);
     createTrackbar("Kernel", ventana, nullptr, 51, eventoTrack, nullptr);
     createTrackbar("Sigma x100", ventana, nullptr, 1000, eventoTrack, nullptr);
     createTrackbar("Umbral", ventana, nullptr, 255, eventoTrack, nullptr);
@@ -44,6 +45,7 @@ inline void crearControles(const string& ventana, const Parametros& p) {
     setTrackbarMin("Niveles", ventana, 2);
     setTrackbarMin("CLAHE x100", ventana, 10);
 
+    setTrackbarPos("Transformacion %", ventana, 100);
     setTrackbarPos("Kernel", ventana, p.tamGauss);
     setTrackbarPos("Sigma x100", ventana, cvRound(p.sigma * 100));
     setTrackbarPos("Umbral", ventana, p.umbral);
@@ -58,6 +60,7 @@ inline void crearControles(const string& ventana, const Parametros& p) {
     setTrackbarPos("CLAHE x100", ventana, cvRound(p.contraste * 100));
 }
 
+// Convierte las posiciones enteras de las barras a parámetros del filtro.
 inline Parametros leerControles(const string& ventana, int kernelAnterior) {
     Parametros p;
     int tam = getTrackbarPos("Kernel", ventana);
@@ -67,7 +70,6 @@ inline Parametros leerControles(const string& ventana, int kernelAnterior) {
         setTrackbarPos("Kernel", ventana, tam);
     }
     p.tamGauss = tam;
-    // Las barras son enteras; dividir entre 100 recupera los parámetros decimales.
     p.sigma = getTrackbarPos("Sigma x100", ventana) / 100.0;
     p.umbral = getTrackbarPos("Umbral", ventana);
     p.pesoPropio = getTrackbarPos("Peso propio %", ventana) / 100.0;
@@ -89,6 +91,4 @@ inline void eventoTeclado(int tecla, EstadoInterfaz& estado) {
         estado.modo = estado.gpuDisponible ? (estado.modo + 1) % 3 : 0;
     if (tecla == 't' || tecla == 'T')
         estado.etapa = (estado.etapa + 1) % 5;
-    if (tecla == 'b' || tecla == 'B')
-        estado.registrar = !estado.registrar;
 }

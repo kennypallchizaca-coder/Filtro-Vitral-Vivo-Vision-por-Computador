@@ -29,7 +29,7 @@ La versión móvil está en el repositorio independiente `App-movil-vision`. Man
 
 ## VTK de escritorio
 
-`Vista3D.hpp` mantiene dos planos y actualiza sus texturas mediante `setImage` y `spinOnce` en cada vuelta. La escena se abre al iniciar; `V` permite cerrarla/reabrirla sin pausar el procesamiento. El resultado no se duplica en HighGUI. La prueba de renderizado verifica el cambio de color en los dos planos, la conservación de la pose y la reapertura.
+`Vista3D.hpp` combina original y efecto con `Mat`, `Rect` y `copyTo`, y actualiza la textura de un plano mediante `setImage` y `spinOnce`. El visor VTK real está integrado en la única ventana blanca Lienzo, junto a las barras y métricas. Arrastrar gira la escena, `R` restaura el encuadre y Esc cierra la aplicación. La prueba verifica colores, pose, reapertura, posición del panel, una sola ventana y cierre seguro. Esta integración es exclusiva del escritorio Windows; no modifica Android.
 
 ## Compilación y comprobación móvil
 
