@@ -1,6 +1,6 @@
 # Guía de defensa del código de escritorio
 
-Esta guía explica la versión de escritorio: cámara o video, efecto cómic, controles, comparación Mat/UMat, mediciones y visualización VTK. Android, el informe académico completo y el vlog quedan pendientes fuera de este alcance.
+Esta guía explica la versión de escritorio: cámara o video, efecto Spiderman, controles, comparación Mat/UMat, mediciones y visualización VTK. La implementación Android se explica en su propio repositorio; el informe y el guion del videoblog son entregables separados.
 
 ## 1. Relación con el material de clase
 
@@ -20,7 +20,7 @@ El kernel ajustable aplica la idea de filtrado por una vecindad estudiada en con
 Los códigos de clase revisados no incluyen las siguientes partes de esta versión:
 
 - La plantilla `Efecto<Imagen>`, la ejecución `UMat/OpenCL` y la trama de puntos mediante operaciones matriciales. Permiten compartir el efecto entre CPU y GPU; introducen construcciones más avanzadas que las de los ejemplos.
-- La vista VTK opcional y sus planos texturizados. La comparación principal utiliza HighGUI, `imshow`, `waitKey` y trackbars, como los ejemplos; VTK se abre con V para inspeccionar el fotograma actual.
+- La vista VTK y sus planos texturizados. HighGUI conserva el original, `imshow`, `waitKey` y trackbars, como los ejemplos; el resultado está en VTK desde el inicio y V permite ocultar/reabrir la escena.
 - Los contadores CPU/GPU/RAM de Windows y la comparación automatizada de tiempos con calentamiento y CSV. El Ejemplo 5 ya guarda un histograma con `ofstream`; aquí se reutiliza la idea de escribir datos, con un formato y mediciones nuevos.
 
 Para defenderlo, atribuye los filtros base a los ejemplos del docente y explica esas ampliaciones como trabajo del proyecto con asistencia de Codex. La estética cómic, las LUT de color, los puntos, el neón y el desplazamiento RGB combinan esas operaciones para el objetivo visual elegido.
@@ -189,11 +189,11 @@ Los valores anteriores empiezan en -1 para obligar a preparar cada caché en su 
 
 En [Interfaz.hpp](../Interfaz.hpp), `numero` formatea decimales. `EstadoInterfaz` conserva parámetros, modo, etapa, disponibilidad y órdenes de salir/registrar. `crearControles` crea doce sliders una sola vez; `leerControles` lee sus posiciones mediante `getTrackbarPos`. `eventoTeclado` recibe el resultado de `waitKey`: Espacio recorre CPU→UMat→comparación, T recorre cinco etapas, B alterna CSV y Esc/q salen.
 
-`visualizar` abre `Lienzo` con `WINDOW_AUTOSIZE`, como en el Ejemplo 7. Convierte las etapas grises a BGR y copia las dos vistas con `copyTo` a rectángulos fijos de `lienzo`, siguiendo el Ejemplo 6. `imshow` presenta esa matriz junto con las barras nativas de OpenCV.
+`visualizar` abre `Lienzo` con `WINDOW_AUTOSIZE`, como en el Ejemplo 7. Copia el original con `copyTo` a un rectángulo fijo del lienzo. `imshow` presenta ese original, recursos y barras nativas de OpenCV; no presenta el resultado procesado. Las etapas grises se convierten a BGR para presentarlas en VTK.
 
-V llama a `mostrarVista3D`, que crea una `Viz3d` con dos `WImage3D` del fotograma actual: original a la izquierda y efecto a la derecha. Son texturas en planos 3D, sin reconstrucción de profundidad. La pose y las normales orientan los planos. `spin` atiende la inspección interactiva; arrastrar rota la escena y R vuelve a encuadrarla. Q o Esc cierran esta vista y reanudan el video. El video queda pausado mientras se inspecciona el fotograma.
+Al iniciar se crea una `Vista3D`; V permite cerrarla o reabrirla. La clase contiene una `Viz3d` y dos `WImage3D`: original a la izquierda y efecto a la derecha. Son texturas en planos 3D, sin reconstrucción de profundidad. En cada vuelta, `actualizar` usa `setImage` en ambos planos y `spinOnce(1, true)` para dibujar y atender eventos sin un segundo ciclo bloqueante. Como no se reconstruyen los planos ni se cambia la pose, se conserva la rotación elegida por el usuario. Arrastrar rota la escena y R vuelve a encuadrarla. Q o Esc cierran solamente esta vista; la cámara continúa y V puede reabrirla.
 
-Cada vuelta captura, lee sliders, toma una copia de parámetros/etapa, procesa, actualiza la comparación y llama `waitKey` para atender eventos. El CSV utiliza esa copia anterior a los eventos para etiquetar correctamente el fotograma medido. `--smoke` procesa el límite de fotogramas y guarda una captura VTK del último; inicializa el interactor una vez con `spinOnce` antes de guardarla. Terminar antes del límite es un error.
+Cada vuelta captura, lee sliders, toma una copia de parámetros/etapa, procesa, actualiza la comparación, llama `waitKey` y actualiza VTK si está abierta. El CSV utiliza esa copia anterior a los eventos para etiquetar correctamente el fotograma medido. `--smoke` actualiza VTK fuera de pantalla en cada vuelta, procesa el límite de fotogramas y guarda una captura del último. Terminar antes del límite es un error. La prueba `textura_video_dinamica` comprueba píxeles renderizados en ambos planos, conservación de pose y reapertura.
 
 `main` interpreta argumentos, valida cantidad 1..10000 y tamaño 8..3840 por 8..2160, abre la fuente y elige captura, benchmark o visualización. El benchmark exige video fijo, un solo modo por proceso y rebobinado válido. Rechaza una salida que identifique el mismo archivo de entrada, y la captura rechaza videos que ya existen para conservar las pruebas anteriores. `--help` explica opciones; las excepciones terminan con un mensaje y código de error.
 

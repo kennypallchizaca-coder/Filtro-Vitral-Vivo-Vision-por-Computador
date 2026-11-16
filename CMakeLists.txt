@@ -17,3 +17,12 @@ if(WIN32)
     # psapi consulta la RAM del proceso; pdh proporciona los contadores GPU de Windows.
     target_link_libraries(interciclo_vision PRIVATE psapi pdh)
 endif()
+
+option(BUILD_TESTING "Compilar pruebas de la vista 3D" OFF)
+if(BUILD_TESTING)
+    enable_testing()
+    add_executable(prueba_vista3d tests/prueba_vista3d.cpp)
+    target_include_directories(prueba_vista3d PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(prueba_vista3d PRIVATE ${OpenCV_LIBS})
+    add_test(NAME textura_video_dinamica COMMAND prueba_vista3d)
+endif()

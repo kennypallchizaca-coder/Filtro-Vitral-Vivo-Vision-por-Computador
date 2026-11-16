@@ -1,6 +1,6 @@
 # Filtro-Spiderman-Vision-por-Computador
 
-Aplicación de escritorio en C++17 y OpenCV que transforma video de cámara o archivo en un efecto cómic inspirado en *Spider-Man: Un nuevo universo*. Combina colores planos, sombras azul-violeta, luces cálidas, puntos halftone, rayado diagonal, contornos negros, tonos neón y una separación RGB suave. La imagen original y el resultado se muestran juntos en una ventana OpenCV con controles deslizantes. La tecla `V` abre una vista 3D opcional del fotograma actual en VTK.
+Aplicación de escritorio en C++17 y OpenCV que transforma video de cámara o archivo en un efecto cómic inspirado en *Spider-Man: Un nuevo universo*. Combina colores planos, sombras azul-violeta, luces cálidas, puntos halftone, rayado diagonal, contornos negros, tonos neón y una separación RGB suave. La ventana OpenCV contiene el original, los controles deslizantes y las mediciones. El video original y el resultado se muestran como texturas dinámicas en VTK, que se abre al iniciar; `V` permite ocultarlo o reabrirlo.
 
 ## Cómo funciona el filtro
 
@@ -57,9 +57,9 @@ En HSV, la máscara de neón selecciona H entre 90 y 170 y S mayor que 50. Se re
 
 La plantilla `Efecto<Imagen>` contiene una sola secuencia de procesamiento: se instancia con `Mat` para CPU y con `UMat` para la ruta OpenCL. `UMat` permite utilizar la GPU en las operaciones compatibles; algunas pueden ejecutarse en CPU según el soporte disponible.
 
-La comparación usa `Lienzo` con `WINDOW_AUTOSIZE`, como el Ejemplo 7. Original y efecto se copian con `copyTo` a dos regiones de un `Mat`, siguiendo los Ejemplos 6 y 7. Las barras se crean con `createTrackbar` y se leen con `getTrackbarPos`, como en el Ejemplo 3.
+La ventana de control usa `Lienzo` con `WINDOW_AUTOSIZE`, como el Ejemplo 7. El original se copia con `copyTo` a una región fija de un `Mat`, siguiendo los Ejemplos 6 y 7. El resultado procesado se presenta en VTK, no se duplica como salida 2D. Las barras se crean con `createTrackbar` y se leen con `getTrackbarPos`, como en el Ejemplo 3.
 
-Al pulsar `V`, VTK muestra ese fotograma original y procesado como texturas sobre dos planos de una escena 3D. Mientras se inspecciona, el video queda pausado. Arrastrar permite rotar la escena y `R` vuelve a encuadrarla; `Q` o Esc cierran la vista 3D y reanudan el video. Los planos no reconstruyen la profundidad de la escena capturada.
+Al iniciar, VTK muestra el video original y procesado como texturas sobre dos planos de una escena 3D. `setImage` actualiza ambas texturas en cada vuelta y `spinOnce` atiende eventos sin detener el ciclo de cámara. No se reconstruyen los widgets ni se restablece su cámara entre fotogramas. Arrastrar permite rotar la escena y `R` vuelve a encuadrarla; `Q` o Esc cierran solamente la vista 3D. `V` permite ocultarla o reabrirla. Los planos no reconstruyen la profundidad de la escena capturada.
 
 ## Compilar y ejecutar
 
@@ -89,7 +89,7 @@ Sin argumentos se abre la cámara 0 a 640×480 y se comparan CPU y OpenCL si se 
 - Sliders: ajustar los parámetros del efecto con el ratón.
 - Espacio: CPU Mat, OpenCL UMat y comparación de ambos sobre el mismo fotograma.
 - `T`: efecto final, gris, Gaussiano, respuesta del kernel propio y máscara de contornos.
-- `V`: abrir la vista 3D del fotograma actual. Dentro de ella: arrastrar para rotar, `R` para encuadrar y `Q` o Esc para volver al video.
+- `V`: abrir/cerrar la vista 3D del video en vivo. Dentro de ella: arrastrar para rotar, `R` para encuadrar y `Q` o Esc para cerrar esa vista sin detener el video.
 - `B`: activar/desactivar el CSV en vivo. `Esc` o `q` minúscula: salir.
 
 Los controles incluyen umbral, tamaño y sigma de Gaussiano, peso del filtro propio, diagonal del kernel, radio de puntos, niveles de color, saturación, brillo, neón, desplazamiento RGB y CLAHE. El tamaño Gaussiano siempre es impar entre 3 y 51.
@@ -104,12 +104,13 @@ El registro en vivo se guarda en `resultados/mediciones_en_vivo.csv`. Para alter
 |---|---|
 | `Principal.cpp` | Cámara/video, comparación, selección OpenCL, tiempos, CSV, benchmark y vista VTK opcional. |
 | `Principal.hpp` | Parámetros y el mismo algoritmo compilado para Mat y UMat. |
+| `Vista3D.hpp` | Dos planos VTK que actualizan sus texturas sin reiniciar la cámara de la escena. |
 | `Interfaz.hpp` | Crear y leer trackbars, convertir sus valores a parámetros y gestionar las teclas. |
 | `Mediciones.hpp/.cpp` | RAM del proceso y contadores CPU/GPU de Windows. |
 
 La base de procesamiento adapta los ejemplos de clase 3 (HSV/Lab), 5 (CLAHE y mediana), 6 (Gaussiano y Sobel) y 9 (mediana frente a ruido impulsivo) de `Vision-Computador/Codigos`. El bloque Gaussiano → Sobel → `convertScaleAbs` → `addWeighted` conserva la secuencia del Ejemplo 6. OpenCL, VTK, el kernel ajustable y las mediciones amplían esa base para el efecto cómic.
 
-La continuación de la versión Android de la Parte I se describe en [docs/ANDROID.md](docs/ANDROID.md).
+La integración con la versión Android de la Parte I se describe en [docs/ANDROID.md](docs/ANDROID.md).
 
 ## Mediciones reproducibles
 
@@ -137,7 +138,7 @@ Cada proceso trabaja a 640x480, calienta al menos 15 fotogramas y 1,1 segundos y
 - `ms_filtro`: solamente el efecto. OpenCL se sincroniza con `ocl::finish()`.
 - `ms_subida` y `ms_bajada`: transferencias entre Mat y UMat, medidas por separado.
 - `ms_proceso`: filtrado más transferencias; para CPU coincide con filtrado.
-- `ms_ciclo`: lectura, ajuste de resolución y procesamiento; en el registro en vivo incluye la comparación y los eventos de HighGUI. El tiempo de inspección de la vista 3D pausada queda fuera. El benchmark no abre ventanas.
+- `ms_ciclo`: lectura, ajuste de resolución y procesamiento; en el registro en vivo incluye la comparación, los eventos de HighGUI y la actualización VTK cuando está abierta. El benchmark no abre ventanas.
 - `fps_proceso`: 1000/ms_proceso; es capacidad de procesamiento. `FPS ventana` incluye el recorrido visible y puede estar limitado por la cámara.
 - RAM: Working Set del proceso en MiB. No representa VRAM; el proceso en vivo conserva los búferes de ambos modos.
 - CPU: porcentaje del proceso normalizado a los procesadores lógicos, muestreado por intervalos.
@@ -146,3 +147,12 @@ Cada proceso trabaja a 640x480, calienta al menos 15 fotogramas y 1,1 segundos y
 Los CSV generados por la aplicación usan punto decimal. En el modo de comparación, las filas CPU y OpenCL de un mismo fotograma comparten el tiempo de ciclo y los recursos del proceso; usa benchmarks separados para comparar cada modo.
 
 Las salidas CPU y OpenCL pueden diferir por redondeos: una diferencia pequeña cerca del umbral puede cambiar la máscara de contornos. Compartir el algoritmo no garantiza igualdad de todos los píxeles.
+
+## Informe y comprobaciones de Parte I
+
+- [Informe con esquema, matemática, gráficas y referencias](docs/INFORME_PARTE_I.html). Se abre en un navegador y se puede imprimir a PDF.
+- [CSV y metadatos de las mediciones](docs/mediciones/metadatos.json): seis casos CPU/OpenCL, 120 muestras por caso y kernels 5, 31 y 51 sobre el mismo clip sintético. No son mediciones del teléfono ni de la cámara en vivo.
+- [Guion del videoblog en inglés](docs/GUION_VIDEO_EN.md). La grabación la realizará el usuario; el guion no sustituye al video.
+- `tests/prueba_vista3d.cpp` verifica texturas dinámicas, pose y reapertura mediante renderizado real. Se habilita con `-DBUILD_TESTING=ON` al configurar CMake y se ejecuta con `ctest --test-dir build --output-on-failure`; no es necesario para abrir la aplicación.
+
+En los benchmarks sin ventanas, PDH devolvió 0 % de motor GPU incluso bajo carga; en vivo sí registró actividad, pero incluye el renderizado VTK. No lo interpretes como una medición aislada del filtro: `nvidia-smi --query-gpu=utilization.gpu,memory.used,power.draw --format=csv -l 1` permite observar la GPU completa mientras corre OpenCL. Se registró hasta 23 % en la prueba documentada; ese dato es global del dispositivo, no exclusivo del filtro.
