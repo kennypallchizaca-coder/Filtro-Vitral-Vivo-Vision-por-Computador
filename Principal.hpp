@@ -56,20 +56,6 @@ inline cv::Mat crearKernel(double diagonal) {
     return cv::Mat_<float>({3, 3}, {-a, -1, 0, -1, 4 + 2 * a, -1, 0, -1, -a}) / (4 + 2 * a);
 }
 
-// Revela el cómic de izquierda a derecha usando Rect/copyTo, como en clase.
-inline void aplicarBarrido(const cv::Mat& original, cv::Mat& resultado, int porcentaje) {
-    if (original.empty() || original.size() != resultado.size() ||
-        original.type() != resultado.type())
-        throw std::invalid_argument("El barrido requiere dos imagenes del mismo tamano y tipo");
-    if (porcentaje < 0 || porcentaje > 100)
-        throw std::invalid_argument("Transformacion: 0..100");
-    int corte = int(original.cols * (porcentaje / 100.0));
-    if (corte < original.cols) {
-        cv::Rect region(corte, 0, original.cols - corte, original.rows);
-        original(region).copyTo(resultado(region));
-    }
-}
-
 // Compilar la misma secuencia para Mat y UMat mantiene comparables ambas rutas.
 template <class Imagen>
 struct Efecto {
@@ -110,18 +96,7 @@ struct Efecto {
         cv::cvtColor(lab, comic, cv::COLOR_Lab2BGR);
         cv::medianBlur(comic, mediana, 3);
         cv::cvtColor(mediana, gris, cv::COLOR_BGR2GRAY);
-        cv::GaussianBlur(gris, imgGauss, cv::Size(p.tamGauss, p.tamGauss), p.sigma, p.sigma);
-        // El tipo flotante conserva signos y decimales antes de obtener la magnitud.
-        cv::filter2D(imgGauss, filtroPropio, CV_32F, kernelPropio);
-        cv::convertScaleAbs(filtroPropio, filtroPropioAbs);
-        cv::Sobel(imgGauss, gx, CV_16S, 1, 0, 3, 1, 0);
-        cv::Sobel(imgGauss, gy, CV_16S, 0, 1, 3, 1, 0);
-        cv::convertScaleAbs(gx, gxpos);
-        cv::convertScaleAbs(gy, gypos);
-        cv::addWeighted(gxpos, 0.5, gypos, 0.5, 0, gradiente);
-        cv::addWeighted(gradiente, 1 - p.pesoPropio, filtroPropioAbs, p.pesoPropio, 0, gradiente);
-        cv::threshold(gradiente, binaria, p.umbral, 255, cv::THRESH_BINARY);
-        cv::medianBlur(binaria, binaria, 3);
+        detectarContornos(p);
 
         cv::LUT(mediana, tabla, comic);
         aplicarPaleta(gris, comic);
@@ -271,6 +246,23 @@ struct Efecto {
     int nivelesAnteriores = -1, radioAnterior = -1, desplazamientoAnterior = -1;
     double diagonalAnterior = -1, contrasteAnterior = -1;
     double saturacionAnterior = -1, brilloAnterior = -1, neonAnterior = -1;
+
+    // Adapta Gaussiano y Sobel del Ejemplo 6, Unidad 2, para construir la máscara de tinta.
+    void detectarContornos(const Parametros& p) {
+        cv::GaussianBlur(gris, imgGauss, cv::Size(p.tamGauss, p.tamGauss), p.sigma, p.sigma);
+        cv::Sobel(imgGauss, gx, CV_16S, 1, 0, 3, 1, 0);
+        cv::Sobel(imgGauss, gy, CV_16S, 0, 1, 3, 1, 0);
+        cv::convertScaleAbs(gx, gxpos);
+        cv::convertScaleAbs(gy, gypos);
+        cv::addWeighted(gxpos, 0.5, gypos, 0.5, 0, gradiente);
+
+        // El kernel propio conserva signos y decimales hasta obtener su magnitud.
+        cv::filter2D(imgGauss, filtroPropio, CV_32F, kernelPropio);
+        cv::convertScaleAbs(filtroPropio, filtroPropioAbs);
+        cv::addWeighted(gradiente, 1 - p.pesoPropio, filtroPropioAbs, p.pesoPropio, 0, gradiente);
+        cv::threshold(gradiente, binaria, p.umbral, 255, cv::THRESH_BINARY);
+        cv::medianBlur(binaria, binaria, 3);
+    }
 
     static void validarColor(const Imagen& imagen) {
         if (imagen.empty() || imagen.type() != CV_8UC3)

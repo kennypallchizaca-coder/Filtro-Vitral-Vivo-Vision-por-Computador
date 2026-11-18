@@ -3,14 +3,12 @@
 #include "Mediciones.hpp"
 #include "Interfaz.hpp"
 #include <opencv2/core/ocl.hpp>
-#include <opencv2/imgcodecs.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/viz.hpp>
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -140,29 +138,6 @@ bool leerFrame(VideoCapture& video, Mat& frame, Size tamano, bool repetir) {
     return true;
 }
 
-void crearCarpetaPadre(const string& ruta) {
-    auto padre = filesystem::path(ruta).parent_path();
-    if (!padre.empty())
-        filesystem::create_directories(padre);
-}
-
-void capturarClip(VideoCapture& video, Size tamano, int cantidad, const string& ruta) {
-    if (filesystem::exists(ruta))
-        throw runtime_error(
-            "El video ya existe. Elija otra ruta para conservar las pruebas anteriores.");
-    crearCarpetaPadre(ruta);
-    VideoWriter grabacion(ruta, VideoWriter::fourcc('M', 'J', 'P', 'G'), 30, tamano);
-    if (!grabacion.isOpened())
-        throw runtime_error("No se pudo crear el video de prueba.");
-    Mat frame;
-    for (int i = 0; i < cantidad; ++i) {
-        if (!leerFrame(video, frame, tamano, false))
-            throw runtime_error("La fuente termino al grabar.");
-        grabacion.write(frame);
-    }
-    cout << "Video original de prueba: " << ruta << " (" << cantidad << " fotogramas)\n";
-}
-
 int benchmark(VideoCapture& video, int cantidad, Size tamano, int modo, const Parametros& p) {
     Efecto<Mat> cpu;
     Efecto<UMat> gpu;
@@ -203,8 +178,41 @@ int benchmark(VideoCapture& video, int cantidad, Size tamano, int modo, const Pa
     return 0;
 }
 
-int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInterfaz& estado,
-               bool smoke, int limite, const string& rutaCaptura) {
+static void dibujarCabecera(Mat& lienzo, const EstadoInterfaz& estado, const Tiempos& t,
+                           const MuestraRecursos& muestra, double fps) {
+    static const array<string, 5> etapas = {
+        "Spiderman", "Gris CLAHE + mediana", "Gaussiano", "Kernel propio",
+        "Mascara de contornos"};
+    static const array<string, 3> modos = {"CPU Mat", "OpenCL UMat", "Comparar CPU / OpenCL"};
+    const Scalar texto(25, 25, 25);
+    string tiempos = "CPU: " + (t.cpu < 0 ? string("--") : numero(t.cpu)) +
+                     " ms | OpenCL: " + (t.gpu < 0 ? string("--") : numero(t.gpu)) +
+                     " ms | FPS: " + numero(fps, 1);
+    string transferencias = "Subida: " + (t.gpu < 0 ? string("--") : numero(t.subida)) +
+                            " ms | Bajada: " + (t.gpu < 0 ? string("--") : numero(t.bajada)) +
+                            " ms";
+    string recursosTexto =
+        "RAM: " + numero(muestra.ramMiB, 1) + " MiB | CPU proceso: " +
+        (muestra.cpuDisponible ? numero(muestra.cpuPorcentaje, 1) + "%" : "sin muestra");
+    string usoGPU =
+        "GPU proceso (motor max): " +
+        (muestra.gpuDisponible ? numero(muestra.gpuMotorPorcentaje, 1) + "%" : "sin muestra");
+    string modo = modos[estado.modo] + " | Sigma: " + numero(estado.parametros.sigma);
+
+    putText(lienzo, "Original | Arrastrar: girar 3D", Point(8, 18), FONT_HERSHEY_SIMPLEX, 0.55,
+            texto, 1, LINE_AA);
+    putText(lienzo, "Efecto: " + etapas[estado.etapa], Point(408, 18), FONT_HERSHEY_SIMPLEX, 0.55,
+            texto, 1, LINE_AA);
+    putText(lienzo, tiempos, Point(8, 37), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+    putText(lienzo, transferencias, Point(408, 37), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+    putText(lienzo, recursosTexto, Point(8, 55), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+    putText(lienzo, usoGPU, Point(408, 55), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+    putText(lienzo, modo, Point(8, 73), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+    putText(lienzo, "Espacio modo | T etapa | R vista | Esc salir", Point(408, 73),
+            FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+}
+
+int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInterfaz& estado) {
     Mat frame, resultado, color;
     if (!leerFrame(video, frame, tamano, false))
         throw runtime_error("El primer fotograma esta vacio.");
@@ -220,21 +228,18 @@ int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInt
 #endif
     namedWindow(ventana, WINDOW_AUTOSIZE);
     crearControles(ventana, estado.parametros);
-    array<string, 5> etapas = {"Spiderman", "Gris CLAHE + mediana", "Gaussiano", "Kernel propio",
-                               "Mascara de contornos"};
-    array<string, 3> modos = {"CPU Mat", "OpenCL UMat", "Comparar CPU / OpenCL"};
     const int anchoVista = 400, altoVista = 300, altoTexto = 80;
     const Rect regionVideo(0, altoTexto, 2 * anchoVista, altoVista);
     // El visor VTK ocupa esta región del lienzo, sin abrir otra ventana de escritorio.
-    const Scalar fondo(240, 240, 240), texto(25, 25, 25);
+    const Scalar fondo(240, 240, 240);
     Mat lienzo(Size(2 * anchoVista, altoTexto + altoVista), CV_8UC3, fondo);
-    int indice = 0;
+    bool primerFrame = true;
     double fps = 0;
     bool ventanaAbierta = true;
     unique_ptr<Vista3D> vista3D;
     while (!estado.salir && ventanaAbierta) {
         auto inicio = Reloj::now();
-        if (indice > 0 && !leerFrame(video, frame, tamano, false)) {
+        if (!primerFrame && !leerFrame(video, frame, tamano, false)) {
             if (esCamara(fuente))
                 throw runtime_error("La camara dejo de entregar fotogramas.");
             cout << "Fin de la fuente de video.\n";
@@ -243,44 +248,15 @@ int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInt
         estado.parametros = leerControles(ventana, estado.parametros.tamGauss);
         const Parametros parametrosFrame = estado.parametros;
         const int etapaFrame = estado.etapa;
-        const int transformacionFrame = getTrackbarPos("Transformacion %", ventana);
         Tiempos t = procesarFrame(frame, parametrosFrame, estado.modo, etapaFrame, cpu, gpu,
                                   frameGPU, resultado);
         if (resultado.channels() == 1)
             cvtColor(resultado, color, COLOR_GRAY2BGR);
         else
             color = resultado;
-        if (etapaFrame == 0)
-            aplicarBarrido(frame, color, transformacionFrame);
         lienzo(Rect(0, 0, lienzo.cols, altoTexto)).setTo(fondo);
 
-        MuestraRecursos muestra = recursos.leer();
-        string tiempos = "CPU: " + (t.cpu < 0 ? string("--") : numero(t.cpu)) +
-                         " ms | OpenCL: " + (t.gpu < 0 ? string("--") : numero(t.gpu)) +
-                         " ms | FPS: " + numero(fps, 1);
-        string transferencias = "Subida: " + (t.gpu < 0 ? string("--") : numero(t.subida)) +
-                                " ms | Bajada: " + (t.gpu < 0 ? string("--") : numero(t.bajada)) +
-                                " ms";
-        string recursosTexto =
-            "RAM: " + numero(muestra.ramMiB, 1) + " MiB | CPU proceso: " +
-            (muestra.cpuDisponible ? numero(muestra.cpuPorcentaje, 1) + "%" : "sin muestra");
-        string usoGPU =
-            "GPU proceso (motor max): " +
-            (muestra.gpuDisponible ? numero(muestra.gpuMotorPorcentaje, 1) + "%" : "sin muestra");
-        string modo = modos[estado.modo] + " | Sigma: " + numero(parametrosFrame.sigma);
-
-        putText(lienzo, "Original | Arrastrar: girar 3D", Point(8, 18), FONT_HERSHEY_SIMPLEX, 0.55,
-                texto, 1, LINE_AA);
-        putText(lienzo, "Efecto: " + etapas[etapaFrame], Point(408, 18), FONT_HERSHEY_SIMPLEX, 0.55,
-                texto, 1, LINE_AA);
-        putText(lienzo, tiempos, Point(8, 37), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
-        putText(lienzo, transferencias, Point(408, 37), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1,
-                LINE_AA);
-        putText(lienzo, recursosTexto, Point(8, 55), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
-        putText(lienzo, usoGPU, Point(408, 55), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
-        putText(lienzo, modo, Point(8, 73), FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
-        putText(lienzo, "Espacio modo | T etapa | R vista | Esc salir", Point(408, 73),
-                FONT_HERSHEY_SIMPLEX, 0.45, texto, 1, LINE_AA);
+        dibujarCabecera(lienzo, estado, t, recursos.leer(), fps);
         imshow(ventana, lienzo);
         int tecla = waitKey(1);
         if (vista3D) {
@@ -309,35 +285,31 @@ int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInt
         vista3D->integrar(ventana, regionVideo, lienzo.size());
         double ciclo = milisegundos(inicio);
         double actual = 1000 / max(ciclo, 0.001);
-        fps = indice == 0 ? actual : fps * 0.9 + actual * 0.1;
-        ++indice;
-        if (smoke && indice >= limite) {
-            if (!vista3D)
-                throw runtime_error("La vista 3D se cerro antes de completar la prueba.");
-            crearCarpetaPadre(rutaCaptura);
-            vista3D->visor.saveScreenshot(rutaCaptura);
-            cout << "Comparacion: " << indice << " fotogramas de " << fuente
-                 << "; captura VTK: " << rutaCaptura << '\n';
-            break;
-        }
+        fps = primerFrame ? actual : fps * 0.9 + actual * 0.1;
+        primerFrame = false;
     }
     vista3D.reset();
     if (ventanaAbierta)
         destroyWindow(ventana);
-    if (smoke && indice < limite)
-        throw runtime_error("La comparacion termino antes del limite solicitado.");
     return 0;
 }
 
 int main(int argc, char** argv) {
     try {
+        // CommandLineParser omite las opciones desconocidas; estas ya no deben abrir la cámara.
+        for (int i = 1; i < argc; ++i) {
+            string opcion = argv[i];
+            if (opcion.empty() || opcion.front() != '-')
+                continue;
+            opcion = opcion.substr(opcion.compare(0, 2, "--") == 0 ? 2 : 1);
+            opcion = opcion.substr(0, opcion.find('='));
+            if (opcion == "capture" || opcion == "smoke" || opcion == "output")
+                throw runtime_error("Opcion retirada: " + opcion + ". Consulta --help.");
+        }
         const string claves =
-            "{help h||Ayuda}{benchmark||Medir sin ventanas}{smoke||Comparacion con cierre "
-            "automatico y captura VTK}"
+            "{help h||Ayuda}{benchmark||Medir sin ventanas}"
             "{source|0|Camara numerica o archivo}{mode|both|cpu, gpu o both}"
-            "{frames|120|Numero de muestras}{width|640|Ancho}{height|480|Alto}"
-            "{output||Captura PNG de la prueba smoke}"
-            "{capture||Grabar clip original MJPG para comparar los mismos fotogramas}"
+            "{frames|120|Numero de muestras del benchmark}{width|640|Ancho}{height|480|Alto}"
             "{device|NVIDIA:GPU:RTX 4070|Seleccion OpenCL explicita}"
             "{kernel|5|Tamano impar Gaussiano, 3 a 51}{sigma|1.73|Sigma Gaussiano}"
             "{own-weight|0.3|Peso filtro propio, 0 a 1}{diagonal|1|Peso diagonal, 0 a 3}";
@@ -346,14 +318,11 @@ int main(int argc, char** argv) {
             argumentos.printMessage();
             cout << "Controles: sliders=parametros, Espacio=modo, T=etapa, R=restaurar vista 3D, "
                     "Esc=salir.\nUna sola ventana Lienzo: original y efecto como textura VTK "
-                    "interactiva; arrastrar sobre las imagenes=rotar.\n"
-                    "Transformacion %: 0=real, 50=mitad comic, 100=efecto completo; solo etapa "
-                    "final.\n";
+                    "interactiva; arrastrar sobre las imagenes=rotar.\n";
             return 0;
         }
         string fuente = argumentos.get<string>("source");
         string modoTexto = argumentos.get<string>("mode");
-        string salida = argumentos.get<string>("output");
         Size tamano(argumentos.get<int>("width"), argumentos.get<int>("height"));
         int cantidad = argumentos.get<int>("frames");
         Parametros p;
@@ -372,29 +341,13 @@ int main(int argc, char** argv) {
         if (modoTexto != "cpu" && modoTexto != "gpu" && modoTexto != "both")
             throw runtime_error("mode debe ser cpu, gpu o both.");
         bool medir = argumentos.has("benchmark");
-        if (argumentos.has("output") && (!argumentos.has("smoke") || medir))
-            throw runtime_error("output solo se usa con --smoke para una captura PNG.");
         if (medir && modoTexto == "both")
             throw runtime_error(
                 "Para comparar RAM use procesos separados: --mode=cpu y --mode=gpu.");
         if (medir && esCamara(fuente))
-            throw runtime_error(
-                "Benchmark requiere un video fijo. Grabe primero con "
-                "--capture=resultados/entrada.avi.");
-        if (salida.empty())
-            salida = "resultados/captura_vtk.png";
-        if (!esCamara(fuente) && filesystem::exists(fuente) && filesystem::exists(salida) &&
-            filesystem::equivalent(fuente, salida))
-            throw runtime_error("La salida no puede ser el mismo archivo que el video de entrada.");
+            throw runtime_error("Benchmark requiere un video fijo: --source=entrada.avi.");
         VideoCapture video;
         abrirFuente(video, fuente, tamano);
-        if (argumentos.has("capture")) {
-            string destino = argumentos.get<string>("capture");
-            if (destino.empty())
-                throw runtime_error("capture necesita una ruta .avi.");
-            capturarClip(video, tamano, cantidad, destino);
-            return 0;
-        }
         string dispositivo = "CPU Mat";
         bool gpuDisponible =
             modoTexto != "cpu" && prepararOpenCL(argumentos.get<string>("device"), dispositivo);
@@ -409,7 +362,7 @@ int main(int argc, char** argv) {
         estado.parametros = p;
         estado.modo = modo;
         estado.gpuDisponible = gpuDisponible;
-        return visualizar(video, fuente, tamano, estado, argumentos.has("smoke"), cantidad, salida);
+        return visualizar(video, fuente, tamano, estado);
     } catch (const exception& error) {
         cerr << "Error: " << error.what() << '\n';
         return 1;

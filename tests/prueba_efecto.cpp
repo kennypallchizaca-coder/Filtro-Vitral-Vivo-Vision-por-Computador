@@ -14,25 +14,8 @@ int main() {
     Mat intacta = original.clone();
     Efecto<Mat> efecto;
     Mat final = efecto.procesar(original, Parametros()).clone();
-    for (int porcentaje : {0, 50, 100}) {
-        Mat vista = final.clone();
-        aplicarBarrido(original, vista, porcentaje);
-        int corte = int(original.cols * (porcentaje / 100.0));
-        for (int x = 0; x < original.cols; ++x)
-            assert(norm(vista.col(x), (x < corte ? final : original).col(x), NORM_INF) == 0);
-    }
     assert(norm(original, intacta, NORM_INF) == 0);
-    for (int invalido : {-1, 101}) {
-        bool rechazo = false;
-        try { aplicarBarrido(original, final, invalido); }
-        catch (const invalid_argument&) { rechazo = true; }
-        assert(rechazo);
-    }
-    Mat distinta(1, 1, CV_8UC3);
-    bool rechazo = false;
-    try { aplicarBarrido(original, distinta, 50); }
-    catch (const invalid_argument&) { rechazo = true; }
-    assert(rechazo);
+    assert(final.size() == original.size());
 
     // Los puntos no deben oscurecer toda la piel ni cubrir las zonas claras.
     Mat gris(24, 24, CV_8UC1, Scalar(100));
@@ -62,5 +45,5 @@ int main() {
     threshold(efecto.gradiente, mascara, 40, 255, THRESH_BINARY);
     medianBlur(mascara, mascara, 3);
     assert(norm(mascara, efecto.binaria, NORM_INF) == 0);
-    cout << "Barrido 0/50/100, trama suave, RGB selectivo y contornos comprobados\n";
+    cout << "Trama suave, RGB selectivo y contornos comprobados\n";
 }

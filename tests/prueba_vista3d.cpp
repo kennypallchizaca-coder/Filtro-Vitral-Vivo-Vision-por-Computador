@@ -67,7 +67,7 @@ int main() {
     {
         namedWindow("Panel prueba", WINDOW_AUTOSIZE);
         crearControles("Panel prueba", Parametros());
-        assert(getTrackbarPos("Transformacion %", "Panel prueba") == 100);
+        assert(getTrackbarPos("Transformacion %", "Panel prueba") < 0);
         imshow("Panel prueba", Mat(380, 800, CV_8UC3, Scalar::all(240)));
         waitKey(1);
         Vista3D vista(rojo, verde);
@@ -90,15 +90,16 @@ int main() {
         assert(colorCentro(vista, 0.98)[1] > 200);
         setTrackbarPos("Kernel", "Panel prueba", 7);
         assert(getTrackbarPos("Kernel", "Panel prueba") == 7);
-        setTrackbarPos("Transformacion %", "Panel prueba", 50);
-        Mat barrido = verde.clone();
-        aplicarBarrido(rojo, barrido, getTrackbarPos("Transformacion %", "Panel prueba"));
-        assert(vista.actualizar(rojo, barrido));
-        assert(colorCentro(vista, 0.45)[1] > 200);
-        assert(colorCentro(vista, 1.45)[2] > 200);
+        EstadoInterfaz estado;
+        for (int etapa = 1; etapa <= 4; ++etapa) {
+            eventoTeclado('T', estado);
+            assert(estado.etapa == etapa);
+        }
+        eventoTeclado('T', estado);
+        assert(estado.etapa == 0);
         // Cerrar la ventana principal debe liberar OpenGL antes de destruir su hija.
         SendMessage(vista.padre, WM_CLOSE, 0, 0);
         assert(vista.visor.wasStopped());
     }
-    cout << "VTK: textura roja/verde actualizada, pose conservada y reapertura correcta\n";
+    cout << "VTK: textura dinamica, pose conservada y reapertura correcta\n";
 }

@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(OpenCV REQUIRED COMPONENTS
-    core imgproc highgui imgcodecs videoio viz
+    core imgproc highgui videoio viz
 )
 
 add_executable(interciclo_vision Principal.cpp Mediciones.cpp)
@@ -39,5 +39,5 @@ if(BUILD_TESTING)
     add_executable(prueba_efecto tests/prueba_efecto.cpp)
     target_include_directories(prueba_efecto PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS})
     target_link_libraries(prueba_efecto PRIVATE ${OpenCV_LIBS})
-    add_test(NAME barrido_y_acabado_comic COMMAND prueba_efecto)
+    add_test(NAME acabado_comic COMMAND prueba_efecto)
 endif()

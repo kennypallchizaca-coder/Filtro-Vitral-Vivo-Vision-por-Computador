@@ -13,7 +13,7 @@ Cada fotograma pasa por estas etapas:
 | Detección de contornos | Escala de grises, Gaussiano, Sobel horizontal/vertical y kernel propio | Suaviza detalles pequeños y calcula una máscara de cambios de intensidad mediante un umbral. |
 | Colores planos | Tabla de consulta `LUT` | Reduce las intensidades a un número ajustable de niveles por canal. El valor inicial es ocho niveles por canal. |
 | Paleta | Máscaras de luminosidad y mezclas con `addWeighted` | Tiñe las sombras de azul-violeta y aporta calidez a las luces, conservando parte del color original. |
-| Halftone | Celdas de 8×8 y puntos de radio variable | Oscurece un 35 % los puntos seleccionados en tonos medios y protege las luces. |
+| Halftone | Celdas de 8×8 y puntos de radio variable | Oscurece un 20 % los puntos seleccionados en tonos medios y protege las luces. |
 | Rayado | Líneas diagonales repetidas y máscara de sombras | Oscurece un 30 % líneas finas únicamente en zonas oscuras. |
 | Tinta | Máscara de contornos aplicada sobre la imagen con puntos | Pinta de negro los píxeles señalados por la máscara de contornos. |
 | Neón | Conversión a HSV y ajustes de S/V mediante LUT | Aumenta saturación y brillo; aplica un refuerzo de brillo a los tonos seleccionados de azul, morado y rosa. |
@@ -43,9 +43,9 @@ Para cada celda del halftone se toma el brillo `I` de su centro y se calcula:
 radio = round((255 - I) * radioMaximo / 255)
 ```
 
-El radio máximo inicial es 1 píxel. La máscara de puntos se limita a píxeles con gris entre 70 y 180. En ellos se conserva el 65 % del color, equivalente a una tinta negra al 35 % de opacidad. Con radio máximo 0 se desactivan los puntos.
+El radio máximo inicial es 1 píxel. La máscara de puntos se limita a píxeles con gris entre 70 y 155. En ellos se conserva el 80 % del color. Con radio máximo 0 se desactivan los puntos.
 
-El rayado utiliza diagonales de un píxel de grosor cada ocho píxeles. Su máscara cumple `x mod 8 = y mod 8` y gris entre 0 y 69. En esas posiciones conserva el 70 % del color. Las dos texturas quedan ancladas a las coordenadas de la imagen y se preparan con operaciones compatibles con `Mat` y `UMat`.
+El rayado utiliza diagonales de un píxel de grosor cada ocho píxeles. Su máscara cumple `x mod 8 = y mod 8` y gris entre 25 y 69. En esas posiciones conserva el 70 % del color. Las dos texturas quedan ancladas a las coordenadas de la imagen y se preparan con operaciones compatibles con `Mat` y `UMat`.
 
 La paleta mezcla un 25 % del color BGR `(150,55,95)` en sombras con gris entre 25 y 120. En luces con gris entre 175 y 245 mezcla un 10 % de BGR `(90,195,245)`. Los tonos medios y los extremos quedan fuera de estas dos máscaras. El rayado continúa activo cuando se desactivan los puntos.
 
@@ -84,12 +84,6 @@ Después de esa configuración, `build` queda en Release. Cierra la ventana con 
 
 Sin argumentos se abre la cámara 0 a 640×480 y se comparan CPU y OpenCL si se encuentra la GPU configurada; si no, se continúa en CPU. La selección predeterminada es `NVIDIA:GPU:RTX 4070`, modificable con `--device`. `--mode=gpu` exige una GPU compatible; `--mode=cpu` omite su selección. Todas las opciones aparecen con `.\build\interciclo_vision.exe --help`.
 
-## Transformación de realidad a cómic
-
-La barra **Transformacion %** revela el efecto de izquierda a derecha en el panel procesado: **0** muestra la imagen real, **50** mitad cómic y mitad real, y **100** el efecto completo. Al iniciar está en 100. El panel original permanece intacto; las etapas intermedias tampoco cambian. Se calcula siempre el filtro completo: el barrido no reduce artificialmente la carga ni los tiempos del filtro. `aplicarBarrido` usa `Rect` y `copyTo`, como los lienzos de clase.
-
-El acabado aplica mediana a la máscara de tinta, limita los puntos a luminosidad 70–155 y oscurece esos puntos solo un 20 %. El rayado actúa entre 25–69. El desplazamiento RGB se copia únicamente cerca de los contornos; fuera de esa máscara conserva los colores. Son ajustes del mismo pipeline, no detección facial ni realidad aumentada.
-
 ## Controles
 
 - Sliders: ajustar los parámetros del efecto con el ratón.
@@ -114,7 +108,19 @@ Los resultados se muestran en vivo; no se guardan mediciones ni se exporta CSV. 
 | `Interfaz.hpp` | Crear y leer trackbars, convertir sus valores a parámetros y gestionar las teclas. |
 | `Mediciones.hpp/.cpp` | RAM del proceso y contadores CPU/GPU de Windows. |
 
-La base de procesamiento adapta los ejemplos de clase 3 (HSV/Lab), 5 (CLAHE y mediana), 6 (Gaussiano y Sobel) y 9 (mediana frente a ruido impulsivo) de `Vision-Computador/Codigos`. El bloque Gaussiano → Sobel → `convertScaleAbs` → `addWeighted` conserva la secuencia del Ejemplo 6. OpenCL, VTK, el kernel ajustable y las mediciones amplían esa base para el efecto cómic.
+### Código adaptado de clase
+
+Los ejemplos están en `Vision-Computador/Codigos`. Se reutilizan las operaciones que encajan en el proyecto, sin importar los programas completos:
+
+| Ejemplo | Adaptación |
+|---|---|
+| 2, Unidad 1 | Captura de video y conversión a gris; aquí se valida cada fotograma. |
+| 3, Unidad 1 | Conversión HSV/Lab, máscaras con `inRange` y lectura de barras. |
+| 5 y 9, Unidad 2 | CLAHE y reducción de ruido con mediana. |
+| 6, Unidad 2, `Principal.cpp` líneas 65–82 | `detectarContornos` agrupa Gaussiano → Sobel → `convertScaleAbs` → `addWeighted`, con tamaño ajustable. A continuación combina la respuesta del kernel propio. |
+| 6 y 7, Unidad 2 | Lienzo dividido en regiones `Rect` y compuesto con `copyTo`. |
+
+El acabado Spiderman, las rutas CPU/OpenCL, la integración VTK y las mediciones en vivo son parte de la adaptación del proyecto. No se incorporó la exportación de histogramas a CSV del Ejemplo 5.
 
 La integración con la versión Android de la Parte I se describe en [docs/ANDROID.md](docs/ANDROID.md).
 
@@ -128,7 +134,7 @@ La interfaz muestra tiempos CPU y OpenCL, transferencias GPU, FPS del ciclo visi
 - Una raya indica una ruta no ejecutada o una muestra aún no disponible.
 - El FPS de ventana incluye captura, procesamiento y presentación; no es lo mismo que la capacidad del filtro.
 
-`--benchmark --source=entrada.avi --mode=cpu` sigue permitiendo una comprobación sin ventanas, pero imprime solo un resumen en consola. `--output` se reserva para una captura PNG de la prueba `--smoke`; no se usa para guardar mediciones.
+`--benchmark --source=entrada.avi --mode=cpu` permite medir un video existente sin ventanas. El resumen de tiempo, FPS y RAM se muestra en consola, sin crear archivos. Usa el mismo video con `--mode=gpu` para comparar ambos procesos.
 
 ## Informe y comprobaciones de Parte I
 

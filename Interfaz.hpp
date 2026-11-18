@@ -26,7 +26,6 @@ inline void eventoTrack(int, void*) {
 
 // Crea las barras y sus valores iniciales, siguiendo los Ejemplos 3 y 7.
 inline void crearControles(const string& ventana, const Parametros& p) {
-    createTrackbar("Transformacion %", ventana, nullptr, 100, eventoTrack, nullptr);
     createTrackbar("Kernel", ventana, nullptr, 51, eventoTrack, nullptr);
     createTrackbar("Sigma x100", ventana, nullptr, 1000, eventoTrack, nullptr);
     createTrackbar("Umbral", ventana, nullptr, 255, eventoTrack, nullptr);
@@ -45,7 +44,6 @@ inline void crearControles(const string& ventana, const Parametros& p) {
     setTrackbarMin("Niveles", ventana, 2);
     setTrackbarMin("CLAHE x100", ventana, 10);
 
-    setTrackbarPos("Transformacion %", ventana, 100);
     setTrackbarPos("Kernel", ventana, p.tamGauss);
     setTrackbarPos("Sigma x100", ventana, cvRound(p.sigma * 100));
     setTrackbarPos("Umbral", ventana, p.umbral);

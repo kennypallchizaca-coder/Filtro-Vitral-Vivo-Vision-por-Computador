@@ -5,6 +5,7 @@
 #include "../Principal.cpp"
 #undef main
 #include <cassert>
+#include <filesystem>
 
 int ejecutar(vector<string> argumentos, string& texto) {
     vector<char*> argv;
@@ -24,6 +25,8 @@ int main(int argc, char** argv) {
     if (string(argv[1]) == "ayuda") {
         assert(ejecutar({"vision", "--help"}, texto) == 0);
         assert(texto.find("CSV") == string::npos);
+        assert(texto.find("Portal") == string::npos);
+        assert(texto.find("textura VTK") != string::npos);
         cout << "Ayuda sin opciones de guardado CSV\n";
         return 0;
     }
@@ -46,9 +49,12 @@ int main(int argc, char** argv) {
     assert(codigo == 0);
     assert(texto.find("Muestras: 3") != string::npos);
     assert(filesystem::is_empty(carpeta / "salidas"));
-    assert(ejecutar({"vision", "--benchmark", "--smoke", "--source=" + video.string(),
-                     "--mode=cpu", "--frames=3", "--output=" + (carpeta / "salida.csv").string()},
-                    texto) == 1);
-    assert(!filesystem::exists(carpeta / "salida.csv"));
+    auto salida = carpeta / "salidas" / "salida.avi";
+    for (const string& opcion : {"--capture=" + salida.string(), string("--smoke"),
+                                 "--output=" + salida.string()}) {
+        assert(ejecutar({"vision", "--benchmark", "--source=" + video.string(),
+                         "--mode=cpu", "--frames=3", opcion}, texto) == 1);
+        assert(filesystem::is_empty(carpeta / "salidas"));
+    }
     cout << "Mediciones en consola, sin archivos; entrada temporal: " << carpeta << '\n';
 }

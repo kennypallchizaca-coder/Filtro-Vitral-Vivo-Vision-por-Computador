@@ -85,11 +85,7 @@ CPU/GPU se muestrean aproximadamente cada segundo y RAM se consulta en cada lect
 
 `benchmark` puede procesar un video fijo sin ventanas: calienta al menos 15 fotogramas y 1.1 segundos, rebobina y calcula medias, mediana y RAM máxima. Solo imprime un resumen; no guarda archivos. No es la cadencia de cámara ni incluye VTK.
 
-`capturarClip` conserva la herramienta existente para crear explícitamente un clip MJPG de prueba. Rechaza sobrescribir un archivo existente. Esa captura de video no es registro de resultados ni mediciones.
-
-`--smoke` ejecuta un número finito de fotogramas y guarda explícitamente una captura PNG VTK para comprobar integración. `--output` solo se acepta con esa prueba; no exporta mediciones. Sin opciones de captura no se crean archivos.
-
-`main` valida opciones, cantidad y resolución; abre la fuente; selecciona captura, comprobación o video en vivo; y presenta errores mediante excepciones controladas. Se conserva la protección contra usar el mismo archivo como entrada y salida.
+`main` valida opciones, cantidad y resolución; abre la fuente y selecciona el benchmark o el video en vivo. El ejecutable no graba clips ni guarda capturas. Las pruebas de VTK verifican el renderizado sin depender de un modo extra en la aplicación.
 
 ## 8. Procedencia y comprobaciones
 
@@ -97,8 +93,8 @@ Se adaptan los ejemplos de clase 3 (HSV, máscaras, barras), 5 (CLAHE/convoluci�
 
 Las pruebas opcionales comprueban texturas dinámicas y pose/reapertura, ayuda sin exportación y un benchmark real que deja vacío su directorio de salida. El informe, las gráficas históricas y el guion son entregables separados del programa en vivo.
 
-## Barrido y acabado del cómic
+## Portal en Android y acabado del cómic
 
-`aplicarBarrido` toma original y resultado del mismo tamaño/tipo. Calcula `corte = ancho * porcentaje / 100` y copia el original desde ese corte hasta el borde derecho. A 0 todo es real; a 100 no sustituye ningún píxel. Es el mismo `Rect`/`copyTo` de los ejemplos del profesor. El filtro siempre se calcula completo y el control no afecta las etapas intermedias. En escritorio se compone después la textura VTK; en Android se encaja el resultado RGBA en el panel sin recortarlo.
+En Android, `aplicarPortal` usa `copyTo` con una máscara para recuperar la cámara original fuera del rectángulo; dentro conserva el filtro Spiderman. OpenCV dibuja el marco con `rectangle`. En escritorio, VTK se usa para la comparación interactiva entre el original y el efecto.
 
 Una mediana sobre la máscara reduce motas de tinta. Puntos menos oscuros y restringidos a tonos medios dejan las luces despejadas; el rayado evita el negro profundo. Para el RGB, `dilate` amplía la máscara de contornos lo justo para cubrir el desplazamiento y `copyTo` aplica el resultado solo allí. No hay reconocimiento facial ni realidad aumentada.

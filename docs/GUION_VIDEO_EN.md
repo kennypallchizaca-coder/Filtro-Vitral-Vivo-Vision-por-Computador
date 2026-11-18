@@ -90,10 +90,10 @@ The main lessons are to reuse the same mathematics, measure completed work, incl
 
 Thank you.
 
-## Optional live sweep demonstration
+## Optional live comic portal demonstration on Android
 
-[Select the final comparison. Set Transformation to zero, then slowly move it to one hundred while moving in front of the camera. On desktop, rotate the VTK plane afterward.]
+[On Android, select Portal cómic and move your hand across the frame.]
 
-The transformation slider reveals the comic from left to right. Zero shows the real image, fifty shows half comic and half real, and one hundred shows the complete effect. The original comparison panel remains unchanged. We use rectangular regions and copyTo, following our classroom examples. Both processing routes still calculate the whole effect, so this slider does not create a false speedup. Intermediate views are not affected.
+The camera stays normal outside the frame and turns into a comic inside it. We use a rectangular mask and copyTo, following our classroom examples. Both processing routes still calculate the whole effect.
 
 The printed dots are lighter, the ink mask is cleaned with a median filter, and RGB displacement is limited to the edges. This is image processing, not augmented reality or face recognition.
