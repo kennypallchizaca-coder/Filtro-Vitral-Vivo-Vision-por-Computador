@@ -1,0 +1,110 @@
+{
+  "date": "2026-11-15",
+  "input": "Synthetic moving gradients, rectangle, circle, line and frame number; MJPG, 640x480,240 frames,30 fps metadata; not a webcam recording",
+  "input_sha256": "D280B824B383003DA2398498782E921DC80B7D6FC27D8F624AF3D74FB90DC118",
+  "benchmark_exe_sha256": "FF046B6DF57E327AF8B3DF03B0E2F0D98C32C75DD7CE19A560BFF6EB7EBED2E7",
+  "production_exe_sha256": "A537FA3EDB9A7A5FAFCF224EEF44FE561ED5830DDEDC3BA1BDAE0A82DA67A90B",
+  "core_sha256": "48C9866153891CFCE00D27524C3996C7DCE6D315D72225C184332CBC9EDF9971",
+  "android_apk_sha256": "15D01C6B52D8D8F01D0EAF3C4D229923F618329C0EB713631A108B907BF571C0",
+  "cpu": "AMD Ryzen 9 7845HX,24 logical processors",
+  "ram_gib": 31.2,
+  "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+  "driver": "617.42",
+  "opencv": "5.0.0",
+  "cases": [
+    {
+      "case": "cpu_k5",
+      "mode": "cpu",
+      "k": 5,
+      "ms": 4.980600833333333,
+      "fps": 200.7789890142103,
+      "cycle": 172.7460811111949,
+      "ram": 94.49072315,
+      "rammax": 94.492188,
+      "cpu": 52.872172
+    },
+    {
+      "case": "gpu_k5",
+      "mode": "gpu",
+      "k": 5,
+      "ms": 5.6080075,
+      "fps": 178.31645196622864,
+      "cycle": 156.19882861291794,
+      "ram": 197.44078751666666,
+      "rammax": 197.441406,
+      "cpu": 6.56305
+    },
+    {
+      "case": "cpu_k31",
+      "mode": "cpu",
+      "k": 31,
+      "ms": 5.490585,
+      "fps": 182.12995518692452,
+      "cycle": 159.00456780372159,
+      "ram": 94.483138025,
+      "rammax": 94.484375,
+      "cpu": 54.090068
+    },
+    {
+      "case": "gpu_k31",
+      "mode": "gpu",
+      "k": 31,
+      "ms": 4.8747283333333336,
+      "fps": 205.1396368413009,
+      "cycle": 179.7975838800678,
+      "ram": 198.17438125833334,
+      "rammax": 198.175781,
+      "cpu": 7.525484
+    },
+    {
+      "case": "cpu_k51",
+      "mode": "cpu",
+      "k": 51,
+      "ms": 6.989238333333334,
+      "fps": 143.07710687597574,
+      "cycle": 128.1101952655596,
+      "ram": 95.23561173333333,
+      "rammax": 95.238281,
+      "cpu": 48.60789
+    },
+    {
+      "case": "gpu_k51",
+      "mode": "gpu",
+      "k": 51,
+      "ms": 4.623735833333333,
+      "fps": 216.27533147348566,
+      "cycle": 188.3815964366993,
+      "ram": 230.21894521666667,
+      "rammax": 230.222656,
+      "cpu": 6.682881
+    }
+  ],
+  "limits": [
+    "single run per case,120 frames,not independent trials",
+    "no camera pacing/rendering in benchmark",
+    "no independent Android device measurement in this revision",
+    "PDH motor counter zero in headless benchmark; positive with VTK rendering,includes rendering and cannot isolate OpenCL"
+  ],
+  "live_cases": [
+    {
+      "mode": "CPU Mat",
+      "n": 743,
+      "first": 390,
+      "last": 1132,
+      "fps": 32.47679579928776,
+      "ram": 336.809455948856,
+      "ms": 5.19600201884253
+    },
+    {
+      "mode": "OpenCL UMat",
+      "n": 743,
+      "first": 390,
+      "last": 1132,
+      "fps": 21.80084491565815,
+      "ram": 371.5828669717362,
+      "ms": 16.732955720053837
+    }
+  ],
+  "live_input_sha256": "51FEEE4F9DF65C5351CC157E1EDB4F01E5FA0F52A74CD391B2CDE2E137B7BAC8",
+  "live_input": "1800-frame synthetic MJPG, same generator with f<1800; VTK visible,HighGUI original+metrics,logging toggled with B;common frame indices only"
+}

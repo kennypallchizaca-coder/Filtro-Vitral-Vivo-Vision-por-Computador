@@ -18,30 +18,25 @@ inline string numero(double valor, int decimales = 2) {
 struct EstadoInterfaz {
     Parametros parametros;
     int modo = 2, etapa = 0;
-    bool gpuDisponible = false, salir = false, registrar = false;
+    bool gpuDisponible = false, salir = false;
 };
 
 inline void eventoTrack(int, void*) {
 }
 
+// Barras de los Ejemplos 3 y 7; OpenAI Codex adaptó los controles a Vitral Vivo.
 inline void crearControles(const string& ventana, const Parametros& p) {
-    // Los Ejemplos 3 y 7 crean las barras y luego asignan sus posiciones iniciales.
     createTrackbar("Kernel", ventana, nullptr, 51, eventoTrack, nullptr);
     createTrackbar("Sigma x100", ventana, nullptr, 1000, eventoTrack, nullptr);
     createTrackbar("Umbral", ventana, nullptr, 255, eventoTrack, nullptr);
     createTrackbar("Peso propio %", ventana, nullptr, 100, eventoTrack, nullptr);
     createTrackbar("Diagonal x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Radio puntos", ventana, nullptr, 3, eventoTrack, nullptr);
-    createTrackbar("Niveles", ventana, nullptr, 16, eventoTrack, nullptr);
-    createTrackbar("Saturacion x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Brillo x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Neon x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Glitch px", ventana, nullptr, 3, eventoTrack, nullptr);
+    createTrackbar("Escala del vitral", ventana, nullptr, 24, eventoTrack, nullptr);
     createTrackbar("CLAHE x100", ventana, nullptr, 800, eventoTrack, nullptr);
 
     setTrackbarMin("Kernel", ventana, 3);
     setTrackbarMin("Sigma x100", ventana, 10);
-    setTrackbarMin("Niveles", ventana, 2);
+    setTrackbarMin("Escala del vitral", ventana, 6);
     setTrackbarMin("CLAHE x100", ventana, 10);
 
     setTrackbarPos("Kernel", ventana, p.tamGauss);
@@ -49,15 +44,11 @@ inline void crearControles(const string& ventana, const Parametros& p) {
     setTrackbarPos("Umbral", ventana, p.umbral);
     setTrackbarPos("Peso propio %", ventana, cvRound(p.pesoPropio * 100));
     setTrackbarPos("Diagonal x100", ventana, cvRound(p.diagonal * 100));
-    setTrackbarPos("Radio puntos", ventana, p.radioPuntos);
-    setTrackbarPos("Niveles", ventana, p.niveles);
-    setTrackbarPos("Saturacion x100", ventana, cvRound(p.saturacion * 100));
-    setTrackbarPos("Brillo x100", ventana, cvRound(p.brillo * 100));
-    setTrackbarPos("Neon x100", ventana, cvRound(p.neon * 100));
-    setTrackbarPos("Glitch px", ventana, p.desplazamiento);
+    setTrackbarPos("Escala del vitral", ventana, p.celda);
     setTrackbarPos("CLAHE x100", ventana, cvRound(p.contraste * 100));
 }
 
+// Convierte las posiciones enteras de las barras a parámetros del filtro.
 inline Parametros leerControles(const string& ventana, int kernelAnterior) {
     Parametros p;
     int tam = getTrackbarPos("Kernel", ventana);
@@ -67,17 +58,11 @@ inline Parametros leerControles(const string& ventana, int kernelAnterior) {
         setTrackbarPos("Kernel", ventana, tam);
     }
     p.tamGauss = tam;
-    // Las barras son enteras; dividir entre 100 recupera los parámetros decimales.
     p.sigma = getTrackbarPos("Sigma x100", ventana) / 100.0;
     p.umbral = getTrackbarPos("Umbral", ventana);
     p.pesoPropio = getTrackbarPos("Peso propio %", ventana) / 100.0;
     p.diagonal = getTrackbarPos("Diagonal x100", ventana) / 100.0;
-    p.radioPuntos = getTrackbarPos("Radio puntos", ventana);
-    p.niveles = getTrackbarPos("Niveles", ventana);
-    p.saturacion = getTrackbarPos("Saturacion x100", ventana) / 100.0;
-    p.brillo = getTrackbarPos("Brillo x100", ventana) / 100.0;
-    p.neon = getTrackbarPos("Neon x100", ventana) / 100.0;
-    p.desplazamiento = getTrackbarPos("Glitch px", ventana);
+    p.celda = getTrackbarPos("Escala del vitral", ventana);
     p.contraste = getTrackbarPos("CLAHE x100", ventana) / 100.0;
     return p;
 }
@@ -89,6 +74,4 @@ inline void eventoTeclado(int tecla, EstadoInterfaz& estado) {
         estado.modo = estado.gpuDisponible ? (estado.modo + 1) % 3 : 0;
     if (tecla == 't' || tecla == 'T')
         estado.etapa = (estado.etapa + 1) % 5;
-    if (tecla == 'b' || tecla == 'B')
-        estado.registrar = !estado.registrar;
 }

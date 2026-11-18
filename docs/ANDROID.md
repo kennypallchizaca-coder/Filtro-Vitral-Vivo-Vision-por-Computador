@@ -1,69 +1,40 @@
-# Android continuation — Part I
+# Android — Parte I
 
-Checkpoint verified on 2026-11-14. The next implementation stage is the Android version of the Part I visual-effects application.
+La versión móvil está en el repositorio independiente `App-movil-vision`. Mantiene su propia copia de `Principal.hpp`, idéntica a la del escritorio, para compilar sin depender de una ruta absoluta a otro proyecto.
 
-## Reusable code
+## Qué se reutiliza
 
-| File | Role in the Android implementation |
+- `Parametros`, su validación y `Efecto<Mat>` / `Efecto<UMat>`: mismo núcleo Vitral Vivo.
+- Mediana, CLAHE, Gaussiano, Sobel, kernel propio y triángulos de color cuyo detalle depende del borde.
+- La lógica matemática procede de los ejemplos de clase; cámara, interfaz y mediciones se adaptan a cada plataforma.
+
+## Qué cambia por plataforma
+
+| Escritorio | Android |
 |---|---|
-| `Principal.hpp` | Reuse the existing `Parametros` and `Efecto<Imagen>` processing code. It requires OpenCV core/imgproc and standard C++. |
-| `Mediciones.hpp` | Review the measurement interface when implementing Android resource reporting. |
-| `Principal.cpp` | Reference for timing, warm-up, comparison and CSV behavior. Its camera, window and VTK integration belongs to desktop. |
-| `Interfaz.hpp` | Desktop HighGUI controls. Android needs controls connected to the same parameters. |
-| `Mediciones.cpp` | Windows implementation using PDH and PSAPI. Android needs its own platform implementation. |
-| `CMakeLists.txt` | Desktop build. The Android native build needs its own OpenCV Android configuration. |
+| VideoCapture y HighGUI, siete trackbars | JavaCamera2View, Kotlin/XML y siete SeekBars |
+| Mat BGR | Cámara RGBA, conversión a BGR en C++ y regreso a RGBA |
+| PSAPI / PDH de Windows | PSS, memoria disponible y tiempo CPU del proceso |
+| VTK interactivo con video en texturas | VTK no se exige en móvil |
+| Ejecutable CMake | JNI, NDK y APK ARM64 |
 
-## Native image contract
+## Contratos que se conservan
 
-- The filter input is a nonempty BGR image with type `CV_8UC3`.
-- Convert the camera's actual pixel format to BGR before processing. Convert the result to the format required by the Android preview.
-- Use `Parametros::validar()` and the current parameter defaults and ranges.
-- Keep the processing order in `Efecto::procesar`, including the contour branch before printed textures.
-- An `Efecto` instance owns mutable buffers and caches. Process frames sequentially on its owning thread.
-- Take a parameter snapshot for each frame when UI updates can occur concurrently.
-- `procesar()` returns a reference to an internal output buffer. Copy or convert that result into the preview output before processing another frame.
+1. El filtro recibe imágenes BGR `CV_8UC3` no vacías y parámetros válidos.
+2. Cada `Efecto` posee sus búferes; no se procesa en paralelo sobre una misma instancia.
+3. La interfaz entrega una copia de los parámetros por fotograma.
+4. La salida Android es RGBA y mantiene las dimensiones de entrada requeridas por el Bitmap de cámara.
+5. La comparación encaja original y resultado completos. Portal Vitral mantiene la cámara original fuera del marco.
+6. La app ejecuta y mide cada modo por separado; OpenCL descarga los mapas reducidos de color y borde, y el dibujo CPU cuenta en el total.
 
-## Verified desktop checkpoint
+## VTK de escritorio
 
-- `cmake --build build --parallel 2` succeeds.
-- The executable's `--help` entry point exits successfully.
-- Focused checks pass for the palette, translucent halftone, highlight protection, dark hatching, radius zero, resolution changes and invalid kernels.
-- CPU and UMat output similarity passed on the NVIDIA GeForce RTX 4070 Laptop GPU.
-- The camera preview ran at approximately 30 FPS during interactive checks.
-- The kernel trackbar changed from 5 to 7 and back to 5 with fixed preview positions.
-- Stage selection and CPU/OpenCL mode switching worked.
-- V opened the VTK inspector. Escape returned to the camera, and a second Escape closed the application successfully.
+`Vista3D.hpp` combina original y efecto con `Mat`, `Rect` y `copyTo`, y actualiza la textura de un plano mediante `setImage` y `spinOnce`. El visor VTK real está integrado en la única ventana blanca Lienzo, junto a las barras y métricas. Arrastrar gira la escena, `R` restaura el encuadre y Esc cierra la aplicación. La prueba sin capturas verifica pose, reapertura, posición del panel, una sola ventana y cierre seguro. No valida píxeles renderizados. Esta integración es exclusiva del escritorio Windows; no modifica Android.
 
-### Benchmark verification
+## Compilación y comprobación móvil
 
-These checks used the same generated synthetic 640×480 MJPG clip, 120 recorded samples per case, and separate CPU/OpenCL processes. The application performed its normal warm-up before sampling.
+En Android Studio se abre el repositorio Android y se ejecuta `app` sobre un dispositivo ARM64. Se utiliza OpenCV 5.0.0 con OpenCL, SDK37, NDK28.2.13676358 y CMake3.22.1.
 
-| Mode | Gaussian kernel | Mean processing time, including GPU transfers |
-|---|---:|---:|
-| CPU Mat | 5 | 5.289 ms |
-| OpenCL UMat | 5 | 5.239 ms |
-| CPU Mat | 31 | 5.548 ms |
-| OpenCL UMat | 31 | 4.627 ms |
+El APK ARM64 se probó en un S25 Ultra: instrumentación JNI, cámara en vertical y horizontal, selector de etapas y conmutación CPU/OpenCL con las dos muestras visibles. Se confirmó la Adreno 830; hubo un intento horizontal con respaldo CPU que no se repitió en la comprobación siguiente. No se hizo un benchmark controlado ni una revisión de todas las combinaciones de permisos y cámaras. Los emuladores locales x86_64 no se usaron.
 
-All four CSVs contained frame indices 0 through 119 and positive filtering time, processing FPS and process RAM readings. These desktop synthetic checks do not establish phone performance. Use the reproducible procedure in the main README for the final measurements on each platform.
-
-## Open desktop requirement
-
-The current VTK inspector displays a paused frame. The teacher's current Part I guide requires the desktop processed video to update as an interactive 3D texture. That requirement remains open before claiming complete desktop delivery.
-
-## Android environment checkpoint
-
-The Android SDK is installed, with NDK `28.2.13676358` and Android CMake `3.22.1` available. The desktop uses OpenCV `5.0.0`.
-
-The Android OpenCV package/version, target ABI, native compilation and physical-device OpenCL support still need verification. Select compatible Android headers and libraries before assuming that the desktop OpenCV installation can be reused.
-
-## Next implementation sequence
-
-1. Identify the target Android device and verify its Android OpenCV/NDK configuration.
-2. Create the Android camera and JNI integration around `Principal.hpp`, starting with CPU `Mat` processing.
-3. Display the original image, final result and selectable intermediate stages.
-4. Connect Android controls to the existing parameter ranges and add mobile timing/resource reporting.
-5. Detect the phone's OpenCL device and verify the `UMat` path. The desktop NVIDIA device selector is machine-specific.
-6. Run CPU/OpenCL comparisons on the same mobile input and record the selected device, resolution, parameters and transfer costs.
-
-GPU availability must be checked on the phone. A `UMat` pipeline can fall back to CPU operations, so report the effective execution mode and device explicitly.
+La [evidencia y declaración de IA](ENTREGA_PARTE_I.md) quedan para la futura plantilla. El guion en inglés describe Vitral Vivo. La Parte II no se incluye.
