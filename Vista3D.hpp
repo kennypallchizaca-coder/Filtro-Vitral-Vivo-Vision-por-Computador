@@ -21,7 +21,7 @@ struct Vista3D {
     cv::Affine3d poseInicial;
 
     Vista3D(const cv::Mat& frame, const cv::Mat& resultado, bool oculta = false)
-        : visor("ASCII 3D"),
+        : visor("Vitral Vivo 3D"),
           imagen(componer(frame, resultado), tamano(frame), cv::Vec3d(0, 0, 0), cv::Vec3d(0, 0, 1),
                  cv::Vec3d(0, 1, 0)) {
         if (oculta)

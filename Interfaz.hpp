@@ -24,19 +24,19 @@ struct EstadoInterfaz {
 inline void eventoTrack(int, void*) {
 }
 
-// Barras de los Ejemplos 3 y 7; OpenAI Codex adaptó los controles al ASCII.
+// Barras de los Ejemplos 3 y 7; OpenAI Codex adaptó los controles a Vitral Vivo.
 inline void crearControles(const string& ventana, const Parametros& p) {
     createTrackbar("Kernel", ventana, nullptr, 51, eventoTrack, nullptr);
     createTrackbar("Sigma x100", ventana, nullptr, 1000, eventoTrack, nullptr);
     createTrackbar("Umbral", ventana, nullptr, 255, eventoTrack, nullptr);
     createTrackbar("Peso propio %", ventana, nullptr, 100, eventoTrack, nullptr);
     createTrackbar("Diagonal x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Celda ASCII", ventana, nullptr, 24, eventoTrack, nullptr);
+    createTrackbar("Escala del vitral", ventana, nullptr, 24, eventoTrack, nullptr);
     createTrackbar("CLAHE x100", ventana, nullptr, 800, eventoTrack, nullptr);
 
     setTrackbarMin("Kernel", ventana, 3);
     setTrackbarMin("Sigma x100", ventana, 10);
-    setTrackbarMin("Celda ASCII", ventana, 6);
+    setTrackbarMin("Escala del vitral", ventana, 6);
     setTrackbarMin("CLAHE x100", ventana, 10);
 
     setTrackbarPos("Kernel", ventana, p.tamGauss);
@@ -44,7 +44,7 @@ inline void crearControles(const string& ventana, const Parametros& p) {
     setTrackbarPos("Umbral", ventana, p.umbral);
     setTrackbarPos("Peso propio %", ventana, cvRound(p.pesoPropio * 100));
     setTrackbarPos("Diagonal x100", ventana, cvRound(p.diagonal * 100));
-    setTrackbarPos("Celda ASCII", ventana, p.celda);
+    setTrackbarPos("Escala del vitral", ventana, p.celda);
     setTrackbarPos("CLAHE x100", ventana, cvRound(p.contraste * 100));
 }
 
@@ -62,7 +62,7 @@ inline Parametros leerControles(const string& ventana, int kernelAnterior) {
     p.umbral = getTrackbarPos("Umbral", ventana);
     p.pesoPropio = getTrackbarPos("Peso propio %", ventana) / 100.0;
     p.diagonal = getTrackbarPos("Diagonal x100", ventana) / 100.0;
-    p.celda = getTrackbarPos("Celda ASCII", ventana);
+    p.celda = getTrackbarPos("Escala del vitral", ventana);
     p.contraste = getTrackbarPos("CLAHE x100", ventana) / 100.0;
     return p;
 }

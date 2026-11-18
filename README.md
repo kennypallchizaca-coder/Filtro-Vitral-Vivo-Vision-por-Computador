@@ -1,14 +1,14 @@
-# Video ASCII en tiempo real
+# Vitral Vivo
 
-La aplicación de escritorio convierte video de cámara o archivo en un retrato de caracteres. Original y ASCII se ven juntos en una sola ventana con controles, mediciones en vivo y una vista VTK interactiva.
+La aplicación de escritorio convierte cámara o video en un vitral de triángulos de color. Original y efecto se ven en una sola ventana con controles y un visor VTK interactivo.
 
 ## Cómo funciona el filtro
 
 1. Convertir el fotograma a gris y aplicar **mediana 3×3** y **CLAHE** para reducir ruido y mejorar el contraste.
 2. Pasar un **Gaussiano** y usar **Sobel** para obtener la intensidad de los bordes.
 3. Combinar Sobel con el kernel propio para decidir cuáles cambios se consideran bordes.
-4. Reducir la imagen a dos cuadrículas: brillo promedio y proporción de borde por celda.
-5. Dibujar una cuadrícula verde estilo terminal. El brillo determina la densidad de cada carácter. Cuando cerca del 10 % de la celda es borde, se sube un nivel en la misma escala, sin dibujar líneas adicionales.
+4. Reducir por área el color BGR original y la máscara de bordes.
+5. Pintar triángulos irregulares con colores locales y uniones oscuras. Los vértices son fijos para cada tamaño y escala; el borde realza sus subdivisiones.
 
 ### Kernel propio
 
@@ -22,13 +22,13 @@ K(a) =     [ -1   4+2a     -1 ] / (4+2a)
 
 `a` corresponde al parámetro `diagonal`, inicialmente 1 y ajustable entre 0 y 3. Modifica el peso de dos vecinos diagonales. La suma de los coeficientes es cero: una zona de intensidad constante produce respuesta cero, mientras que los cambios espaciales pueden producir una respuesta distinta de cero.
 
-`filter2D` aplica el kernel sobre la imagen gris con suavizado Gaussiano y conserva su respuesta en `CV_32F`. Después, `convertScaleAbs` obtiene su magnitud y la convierte a ocho bits. Esa respuesta se combina con los bordes de Sobel usando `pesoPropio`, inicialmente 0,3: 70 % Sobel y 30 % kernel propio. Un umbral, inicialmente 40, selecciona qué píxeles cuentan como borde al escoger un carácter.
+`filter2D` aplica el kernel al gris suavizado. `convertScaleAbs` multiplica la magnitud por 12 y la limita a 255 para acercarla a la escala de Sobel. El peso propio (0,3 inicial) mezcla ambas respuestas; el umbral y la mediana definen dónde resaltar detalle.
 
-El control **Celda ASCII** ajusta cuántos caracteres caben. Cada celda mide inicialmente 9 píxeles de ancho por 13 de alto. El dibujo reutiliza una ficha para cada símbolo; no vuelve a llamar a putText para cada casilla.
+**Escala del vitral** controla el tamaño de las piezas. Con escala 9, los bloques de la malla miden cerca de 27 píxeles de lado.
 
 ### CPU, OpenCL y visualización
 
-La plantilla `Efecto<Imagen>` contiene una sola secuencia de procesamiento: se instancia con `Mat` para CPU y con `UMat` para la ruta OpenCL. `UMat` permite utilizar la GPU en las operaciones compatibles; algunas pueden ejecutarse en CPU según el soporte disponible. En la vista ASCII solo se descargan las dos matrices de celdas. Las dos rutas dibujan los caracteres en CPU; el benchmark incluye ese dibujo en el tiempo total, no en el tiempo de filtrado.
+`Efecto<Imagen>` ejecuta el mismo procesamiento con `Mat` (CPU) o `UMat` (OpenCL cuando la operación dispone de soporte). Solo se descargan los mapas reducidos de color y borde para el vitral. El dibujo en CPU se incluye en el tiempo total, no en el de filtrado.
 
 La ventana usa `Lienzo` con `WINDOW_AUTOSIZE`, como el Ejemplo 7. Original y efecto se copian con `copyTo` a dos regiones `Rect` de un mismo `Mat`, siguiendo los Ejemplos 6 y 7. Las barras se crean con `createTrackbar` y se leen con `getTrackbarPos`, como en el Ejemplo 3.
 
@@ -65,7 +65,7 @@ Sin argumentos se abre la cámara 0 a 640×480 y se comparan CPU y OpenCL si se 
 - Arrastrar sobre las imágenes: girar la comparación 3D. `R`: restaurar su encuadre.
 - `Esc` o `q` minúscula: salir.
 
-Los siete controles son el umbral, el tamaño y sigma del Gaussiano, el peso propio, la diagonal del kernel, el ancho de celda ASCII (6–24 píxeles) y el contraste CLAHE. El tamaño Gaussiano siempre es impar entre 3 y 51.
+Los siete controles son el umbral, el tamaño y sigma del Gaussiano, el peso propio, la diagonal del kernel, la escala del vitral (6–24) y el contraste CLAHE. El tamaño Gaussiano es impar entre 3 y 51.
 
 La barra `Kernel` muestra el tamaño del Gaussiano entre 3 y 51. Cuando se selecciona un número par, la barra avanza al impar vecino en la dirección del ajuste. En las barras `x100`, 125 corresponde a 1,25. `Peso propio %` muestra el porcentaje aplicado al filtro propio.
 
@@ -93,7 +93,7 @@ Los ejemplos están en `Vision-Computador/Codigos`. Se reutilizan las operacione
 | 6, Unidad 2, `Principal.cpp` líneas 65–82 | `detectarContornos` agrupa Gaussiano → Sobel → `convertScaleAbs` → `addWeighted`, con tamaño ajustable. A continuación combina la respuesta del kernel propio. |
 | 6 y 7, Unidad 2 | Lienzo dividido en regiones `Rect` y compuesto con `copyTo`. |
 
-La conversión a caracteres, las rutas CPU/OpenCL, la integración VTK y las mediciones en vivo son parte de la adaptación del proyecto. No se incorporó la exportación de histogramas a CSV del Ejemplo 5.
+La malla de vitral, las rutas CPU/OpenCL, la integración VTK y las mediciones son parte de la adaptación del proyecto. No se incorporó la exportación CSV del Ejemplo 5.
 
 La integración con la versión Android de la Parte I se describe en [docs/ANDROID.md](docs/ANDROID.md).
 
@@ -111,7 +111,7 @@ La interfaz muestra tiempos CPU y OpenCL, transferencias GPU, FPS del ciclo visi
 
 ## Informe y comprobaciones de Parte I
 
-- [Estado, resultados ASCII y declaración de IA para la plantilla](docs/ENTREGA_PARTE_I.md).
+- [Estado, resultados de Vitral Vivo y declaración de IA](docs/ENTREGA_PARTE_I.md).
 - [Datos históricos y metadatos del informe](docs/mediciones/metadatos.json): seis casos CPU/OpenCL, 120 muestras por caso y kernels 5, 31 y 51 sobre el mismo clip sintético. No son mediciones del teléfono ni de la cámara en vivo.
 - [Guion del videoblog en inglés](docs/GUION_VIDEO_EN.md). La grabación la realizará el usuario; el guion no sustituye al video.
 - `tests/prueba_vista3d.cpp` verifica texturas dinámicas, pose, reapertura, integración en una sola ventana, posición del panel, trackbars y cierre del padre mediante renderizado real. Se habilita con `-DBUILD_TESTING=ON` al configurar CMake y se ejecuta con `ctest --test-dir build --output-on-failure`; no es necesario para abrir la aplicación.

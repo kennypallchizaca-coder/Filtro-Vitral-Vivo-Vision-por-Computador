@@ -3,12 +3,10 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
-#include <cmath>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
-// Asistencia de IA: OpenAI Codex adaptó los filtros de clase al efecto ASCII y a Mat/UMat.
+// Asistencia de IA: OpenAI Codex adaptó los filtros de clase a Vitral Vivo y a Mat/UMat.
 struct Parametros {
     int umbral = 40;
     int tamGauss = 5;
@@ -30,7 +28,7 @@ struct Parametros {
         if (!(diagonal >= 0 && diagonal <= 3))
             throw std::invalid_argument("Diagonal: 0..3");
         if (celda < 6 || celda > 24)
-            throw std::invalid_argument("Celda ASCII: 6..24");
+            throw std::invalid_argument("Escala del vitral: 6..24");
         if (!(contraste >= 0.1 && contraste <= 8))
             throw std::invalid_argument("Contraste CLAHE: 0.1..8");
     }
@@ -44,54 +42,86 @@ inline cv::Mat crearKernel(double diagonal) {
     return cv::Mat_<float>({3, 3}, {-a, -1, 0, -1, 4 + 2 * a, -1, 0, -1, -a}) / (4 + 2 * a);
 }
 
-struct CuadriculaAscii {
-    cv::Mat luz, bordes;
+struct CuadriculaVitral {
+    cv::Mat color, bordes;
     int celda;
 };
 
-inline constexpr char tonosAscii[] = " .,:;+=*#%@";
-
-inline char caracterAscii(uchar luz, uchar borde) {
-    const int ultimo = sizeof(tonosAscii) - 2;
-    double brillo = std::clamp((luz - 9) / 204.0, 0.0, 1.0);
-    // La gamma aclara los tonos medios; los bordes solo suben un nivel, sin dibujar rayas.
-    int nivel = cvRound(ultimo * std::pow(brillo, 0.77));
-    return tonosAscii[std::min(ultimo, nivel + (borde >= 25))];
-}
-
-inline cv::Mat dibujarAscii(const CuadriculaAscii& c, cv::Size tamano) {
-    int ancho = c.celda, alto = c.celda * 3 / 2;
-    const cv::Scalar fondo(25, 32, 19);
-    const std::string caracteres(tonosAscii);
-    const int fuente = cv::FONT_HERSHEY_PLAIN;
-    const int grosor = 3;
-    int base;
-    int anchoMaximo = cv::getTextSize("@", fuente, 1.0, grosor, &base).width;
-    double escala = (2.0 * ancho - 2 - grosor) / (anchoMaximo - grosor);
-    std::vector<cv::Mat> letras;
-    // Las fichas se dibujan al doble y se reducen para conservar el trazo en celdas pequeñas.
-    for (size_t i = 0; i < caracteres.size(); ++i) {
-        cv::Mat ficha(2 * alto, 2 * ancho, CV_8UC3, fondo);
-        std::string texto(1, caracteres[i]);
-        double nivel = double(i) / (caracteres.size() - 1);
-        cv::Scalar tinta(163 + 50 * nivel, 211 + 34 * nivel, 155 + 60 * nivel);
-        cv::Size medida = cv::getTextSize(texto, fuente, escala, grosor, &base);
-        cv::putText(ficha, texto, cv::Point((2 * ancho - medida.width) / 2,
-                    (2 * alto + medida.height - base) / 2), fuente, escala, tinta, grosor);
-        cv::resize(ficha, ficha, cv::Size(ancho, alto), 0, 0, cv::INTER_AREA);
-        letras.push_back(ficha);
+inline cv::Mat dibujarVitral(const CuadriculaVitral& c, cv::Size tamano) {
+    cv::Mat vitral;
+    if (tamano.width < 3 || tamano.height < 3) {
+        cv::resize(c.color, vitral, tamano, 0, 0, cv::INTER_NEAREST);
+        return vitral;
     }
-
-    cv::Mat mosaico(c.luz.rows * alto, c.luz.cols * ancho, CV_8UC3);
-    for (int y = 0; y < c.luz.rows; ++y) {
-        for (int x = 0; x < c.luz.cols; ++x) {
-            char letra = caracterAscii(c.luz.at<uchar>(y, x), c.bordes.at<uchar>(y, x));
-            letras[caracteres.find(letra)].copyTo(mosaico(cv::Rect(x * ancho, y * alto, ancho, alto)));
+    const int lado = 3 * c.celda;
+    const int nx = std::max(1, (tamano.width + lado / 2) / lado);
+    const int ny = std::max(1, (tamano.height + lado / 2) / lado);
+    const int radio = std::min((tamano.width - 1) / nx, (tamano.height - 1) / ny) / 4;
+    const cv::Scalar plomo(17, 14, 12);
+    vitral = cv::Mat(tamano, CV_8UC3, plomo);
+    std::vector<cv::Point> puntos((nx + 1) * (ny + 1));
+    auto punto = [&](int x, int y) -> cv::Point& { return puntos[y * (nx + 1) + x]; };
+    // El desplazamiento depende solo de las coordenadas; el video nunca mueve los vértices.
+    for (int y = 0; y <= ny; ++y) {
+        for (int x = 0; x <= nx; ++x) {
+            unsigned h = 0x9e3779b9u * x ^ 0x85ebca6bu * y;
+            h = (h ^ (h >> 16)) * 0x7feb352du;
+            const int dx = x && x < nx ? int(h % (2 * radio + 1)) - radio : 0;
+            const int dy = y && y < ny ? int((h >> 16) % (2 * radio + 1)) - radio : 0;
+            punto(x, y) = {x * (tamano.width - 1) / nx + dx, y * (tamano.height - 1) / ny + dy};
         }
     }
-    if (mosaico.size() != tamano)
-        cv::resize(mosaico, mosaico, tamano, 0, 0, cv::INTER_NEAREST);
-    return mosaico;
+    auto muestra = [&](cv::Point p) {
+        return cv::Point(p.x * c.color.cols / tamano.width, p.y * c.color.rows / tamano.height);
+    };
+    auto color = [&](cv::Point p) {
+        const cv::Vec3b bgr = c.color.at<cv::Vec3b>(p);
+        return cv::Scalar(bgr[0], bgr[1], bgr[2]);
+    };
+    auto cara = [&](cv::Point a, cv::Point b, cv::Point d) {
+        const cv::Point v[] = {a, b, d};
+        const cv::Point centro((a.x + b.x + d.x) / 3, (a.y + b.y + d.y) / 3);
+        const cv::Point central = muestra(centro);
+        const cv::Scalar base = color(central);
+        cv::fillConvexPoly(vitral, v, 3, base);
+        cv::Point muestras[3];
+        int detalle = c.bordes.at<uchar>(central);
+        for (int i = 0; i < 3; ++i) {
+            const cv::Point suma = v[i] + v[(i + 1) % 3] + centro;
+            muestras[i] = muestra({suma.x / 3, suma.y / 3});
+            detalle = std::max(detalle, int(c.bordes.at<uchar>(muestras[i])));
+        }
+        if (detalle == 0 || centro == a || centro == b || centro == d)
+            return;
+        // Las caras internas ya existen: el borde solo aumenta su contraste, sin moverlas.
+        const double intensidad = std::min(detalle / 56.0, 1.0);
+        for (int i = 0; i < 3; ++i) {
+            const cv::Point interior[] = {v[i], v[(i + 1) % 3], centro};
+            cv::fillConvexPoly(vitral, interior, 3, base * (1 - intensidad) + color(muestras[i]) * intensidad);
+        }
+        for (auto p : v)
+            cv::line(vitral, p, centro, base * (1 - intensidad) + plomo * intensidad);
+    };
+    for (int y = 0; y < ny; ++y) {
+        for (int x = 0; x < nx; ++x) {
+            auto a = punto(x, y), b = punto(x + 1, y), d = punto(x, y + 1), e = punto(x + 1, y + 1);
+            if ((x + y) % 2) {
+                cara(a, b, d);
+                cara(b, e, d);
+            } else {
+                cara(a, b, e);
+                cara(a, e, d);
+            }
+        }
+    }
+    for (int y = 0; y <= ny; ++y)
+        for (int x = 0; x <= nx; ++x) {
+            if (x < nx) cv::line(vitral, punto(x, y), punto(x + 1, y), plomo);
+            if (y < ny) cv::line(vitral, punto(x, y), punto(x, y + 1), plomo);
+            if (x < nx && y < ny)
+                cv::line(vitral, punto(x + (x + y) % 2, y), punto(x + (1 - (x + y) % 2), y + 1), plomo);
+        }
+    return vitral;
 }
 
 // Mat y UMat conservan los mismos filtros y la misma cuadrícula de salida.
@@ -118,17 +148,16 @@ struct Efecto {
         detectarContornos(p);
 
         anchoCelda = p.celda;
-        cv::Size celdas(std::max(1, frame.cols / p.celda),
-                       std::max(1, frame.rows / (p.celda * 3 / 2)));
-        cv::resize(gris, luzCeldas, celdas, 0, 0, cv::INTER_AREA);
+        cv::Size celdas(std::max(1, frame.cols / p.celda), std::max(1, frame.rows / p.celda));
+        cv::resize(frame, colorCeldas, celdas, 0, 0, cv::INTER_AREA);
         cv::resize(binaria, bordeCeldas, celdas, 0, 0, cv::INTER_AREA);
     }
 
-    CuadriculaAscii cuadricula() const {
-        CuadriculaAscii c;
+    CuadriculaVitral cuadricula() const {
+        CuadriculaVitral c;
         c.celda = anchoCelda;
         // Desde OpenCL solo se leen las celdas, no una imagen completa.
-        luzCeldas.copyTo(c.luz);
+        colorCeldas.copyTo(c.color);
         bordeCeldas.copyTo(c.bordes);
         return c;
     }
@@ -136,7 +165,7 @@ struct Efecto {
 private:
     cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
     cv::Mat kernelPropio;
-    Imagen gx, gy, gxpos, gypos, filtroPropio, luzCeldas, bordeCeldas;
+    Imagen gx, gy, gxpos, gypos, filtroPropio, colorCeldas, bordeCeldas;
     double diagonalAnterior = -1, contrasteAnterior = -1;
     int anchoCelda = 9;
 
@@ -150,7 +179,8 @@ private:
         cv::addWeighted(gxpos, 0.5, gypos, 0.5, 0, gradiente);
 
         cv::filter2D(imgGauss, filtroPropio, CV_32F, kernelPropio);
-        cv::convertScaleAbs(filtroPropio, filtroPropioAbs);
+        // Ganancia fija: alinea el kernel normalizado con Sobel antes del umbral común.
+        cv::convertScaleAbs(filtroPropio, filtroPropioAbs, 12.0);
         cv::addWeighted(gradiente, 1 - p.pesoPropio, filtroPropioAbs, p.pesoPropio, 0, gradiente);
         cv::threshold(gradiente, binaria, p.umbral, 255, cv::THRESH_BINARY);
         cv::medianBlur(binaria, binaria, 3);

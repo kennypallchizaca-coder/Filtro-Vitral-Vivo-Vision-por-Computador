@@ -1,4 +1,32 @@
-# Parte I: verificación y material para la plantilla
+# Vitral Vivo — Parte I
+
+Vitral Vivo reemplaza el ASCII por una malla estable de triángulos de color y uniones oscuras. Sobel y el kernel propio, calibrado antes de la mezcla, realzan subdivisiones sin mover sus vértices. Se conservan mediana, CLAHE, Gaussiano, los controles dinámicos, la textura VTK y la comparación original/efecto con vistas intermedias en Android. Ambos repositorios contienen el mismo `Principal.hpp`.
+
+## Evidencia vigente (PC, 17 de noviembre de 2026)
+
+- Escritorio Release: 3/3 pruebas sin ventana. Se compiló la prueba VTK pero no se ejecutó porque obtiene una captura del visor. Falta repetir la demostración VTK y el uso de GPU en vivo sin capturas.
+- Android: APK ARM64 y APK de instrumentación compilados offline, 3/3 pruebas JVM, 11/11 comprobaciones estáticas y de empaquetado, 1/1 prueba nativa en Windows con OpenCL y prueba adicional de respaldo CPU. Lint: 0 errores, 8 advertencias. No se ejecutó instrumentación en el teléfono.
+- En Android, CPU/Mat y GPU/OpenCL tienen ventanas separadas; la pantalla conserva la última muestra completa de cada ruta y no cuenta el respaldo como OpenCL. Falta probar cámara, disponibilidad efectiva de OpenCL y rendimiento de Vitral Vivo en el S25 Ultra.
+- Asistencia: OpenAI Codex implementó la malla y el ajuste del kernel, integró las ventanas de medición y añadió pruebas de estabilidad y rutas separadas. Petición: «Sí, cambia el ASCII por el vitral de triángulos con malla estable en los dos proyectos.» Falta contrastar la política complementaria del AVAC.
+
+## Benchmark del vitral en escritorio
+
+Mismo clip sintético MJPG de 180 fotogramas, 640×480, SHA-256 `5A79D866C2AFD443C5219F1E174723BBE9C34E10B462D2D0E15FD99EB8D35AE0`. OpenCV 5.0.0, compilación Release; GPU NVIDIA GeForce RTX 4070 Laptop GPU, controlador 617.42. Se midieron 120 fotogramas por combinación en procesos separados tras calentar. El clip se generó en temporal con figuras geométricas y se eliminó; no es una captura ni se exportó CSV.
+
+| Gaussiano | Modo | Filtro medio (ms) | Proceso medio (ms) | FPS de proceso | RAM máxima (MiB) |
+|---:|---|---:|---:|---:|---:|
+| 5 | CPU | 2,57 | 3,52 | 284,43 | 81,47 |
+| 5 | OpenCL | 1,47 | 2,72 | 367,88 | 191,46 |
+| 31 | CPU | 3,30 | 4,28 | 233,66 | 80,22 |
+| 31 | OpenCL | 1,33 | 2,49 | 402,20 | 193,05 |
+| 51 | CPU | 4,55 | 5,50 | 181,81 | 80,01 |
+| 51 | OpenCL | 1,35 | 2,52 | 396,18 | 193,18 |
+
+El total incluye dibujo del vitral en CPU y, en OpenCL, transferencias. Los FPS son de procesamiento, no de cámara ni de la ventana con VTK; la RAM es el Working Set del proceso, no VRAM. Para repetir la comparación con un clip fijo, usa `--benchmark --source=ruta.avi --frames=120 --kernel=5 --mode=cpu`; cambia el modo a `gpu` y repite con kernels 31 y 51.
+
+## Registro histórico: versión ASCII sustituida
+
+Las cifras, pruebas y prompts que siguen corresponden al filtro anterior. Se conservan para trazabilidad y no se deben presentar como evidencia de Vitral Vivo.
 
 La guía vigente es `Guia-Proyecto-Integrador-Visión-Artificial-G9_.pdf`, en `Vision-Computador/Proyectos/Proyecto-Integrador-G9`. Las páginas 3–8 contienen el alcance y la rúbrica del interciclo. El ejemplo tipo Sketch no obliga a copiar un estilo. El efecto elegido para esta entrega es ASCII.
 

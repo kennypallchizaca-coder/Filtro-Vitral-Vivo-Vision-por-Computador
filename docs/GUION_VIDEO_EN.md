@@ -1,12 +1,12 @@
-# Live ASCII video effect: English videoblog script
+# Vitral Vivo: live stained-glass video effect
 
 Estimated spoken duration: 6–7 minutes. Record the actual desktop and phone application. The bracketed directions are filming cues, not spoken text. This file is a script, not a completed video.
 
 ## 1. Objective
 
-[Show the original camera image and the ASCII result.]
+[Show the original camera image beside Vitral Vivo in the live demonstration.]
 
-Hello. This project transforms live video into a portrait made of printable characters.
+Hello. Vitral Vivo transforms live video into a stained-glass mosaic of colored triangles.
 
 The application has two versions: a C++ desktop application and an Android application with a native C++ processing library. Both use OpenCV and the same image-processing code.
 
@@ -30,15 +30,15 @@ Our kernel is based on a Laplacian edge detector. Its center is positive and sel
 
 The coefficients add up to zero. For example, when every pixel in a neighborhood has the same brightness, its response is zero. A change in brightness can produce a nonzero response.
 
-We keep the signed response in a floating-point image before calculating its absolute value. The own-weight parameter mixes this response with Sobel. A threshold creates the mask that identifies areas where we want to add one step of character density.
+We keep the signed response in a floating-point image, then take its absolute value and add a fixed gain to bring it closer to Sobel's scale. The weight control mixes the two; the resulting mask reveals smaller facets near edges.
 
-## 4. Drawing the ASCII frame
+## 4. Drawing the stained glass
 
-[Show the final result and move the cell-size slider.]
+[Show the final result and change the stained-glass scale.]
 
-We split the frame into a grid. A dark cell uses a sparse character or a space. A bright cell uses a dense symbol, such as the at sign.
+We use a fixed mesh of irregular triangles. Their colors come from the video and dark seams form the glass pattern.
 
-When the edge mask covers about ten percent of a cell, we move one step up the same brightness scale. We draw thicker green symbols on a dark background. Each symbol is drawn at double size with putText, reduced to fit its cell, and copied into the grid. Smaller cells preserve more detail.
+Near edges we gradually reveal smaller facets inside the same triangles. The mesh does not move from one frame to the next.
 
 ## 5. Desktop, controls and 3D
 
@@ -52,13 +52,13 @@ The Gaussian kernel size changes the computational load. It is always an odd num
 
 ## 6. CPU and OpenCL measurements
 
-[Show current ASCII timings in the app. Label any older charts as historical.]
+[Show current Vitral Vivo timings. Distinguish processing throughput from camera FPS.]
 
 The CPU version uses Mat. The OpenCL version uses UMat and enables OpenCL explicitly. A shared template avoids writing the effect twice.
 
-OpenCL work can be asynchronous, so the program waits for completion before reading its timers. The desktop interface separates upload, filtering and download time. We display process RAM and resource samples live. OpenCL downloads the smaller grid for the final ASCII view. Drawing characters runs on the CPU and is included in the total processing time.
+OpenCL work can be asynchronous, so we wait before reading the timers. Desktop shows upload, filtering and download separately. We download reduced color and edge maps and draw the stained glass on the CPU; that drawing counts in the total.
 
-For a fair benchmark, both modes use the same video, parameters, and warm-up procedure. Historical charts from the earlier effect do not measure ASCII.
+For a fair desktop benchmark both modes use the same synthetic video, parameters and warm-up. Earlier effects' figures do not describe Vitral Vivo.
 
 OpenCL is not always faster. Transfers, image size, operation support and kernel size affect the result. The processing throughput is not the camera's capture rate, and process RAM is not dedicated GPU memory.
 
@@ -70,7 +70,7 @@ On Android, Kotlin manages the camera, controls and lifecycle. JNI connects the 
 
 The camera supplies RGBA images. C++ converts them to BGR for processing and returns RGBA with the original dimensions. The comparison fits both complete images without stretching or cropping them.
 
-The application displays timing, preview FPS, process CPU and memory. Both routes are timed on the same frame, and their measurements stay on screen. No results are recorded or exported. If an actual GPU route is unavailable, the interface reports the CPU fallback instead of inventing GPU results.
+Android runs one mode at a time and keeps the latest complete sample for each. We show processing time, preview FPS, process CPU and memory. We do not export results. A CPU fallback is labeled and not reported as an OpenCL sample.
 
 The desktop measurements in this report are not measurements of this phone.
 
@@ -78,16 +78,16 @@ The desktop measurements in this report are not measurements of this phone.
 
 [Return to the final visual effect and the bibliography.]
 
-This project combines familiar classroom operations with a parameterized custom kernel and pixel masks to create an ASCII video effect on desktop and Android.
+Vitral Vivo combines four classroom filters and a custom kernel with a stable triangular mesh on desktop and Android.
 
 The main lessons are to reuse the same mathematics, measure completed work, include transfer costs, and describe the limits of each measurement. The report identifies the adapted classroom examples, published references, library documentation and development assistance.
 
 Thank you.
 
-## Optional live ASCII portal demonstration on Android
+## Optional live stained-glass portal demonstration on Android
 
-[On Android, select Portal ASCII and move your hand across the frame.]
+[On Android, select Portal Vitral and move your hand across the frame.]
 
-The camera stays normal outside the frame and turns into characters inside it. We use a rectangular mask and copyTo, following our classroom examples. Both processing routes still calculate the whole effect.
+The camera stays normal outside the rectangle and turns into stained glass inside it. We use a rectangular mask and copyTo, following the classroom examples.
 
 This is image processing, not augmented reality or face recognition.

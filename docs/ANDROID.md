@@ -4,8 +4,8 @@ La versión móvil está en el repositorio independiente `App-movil-vision`. Man
 
 ## Qué se reutiliza
 
-- `Parametros`, su validación y `Efecto<Mat>` / `Efecto<UMat>`: mismo kernel y misma secuencia ASCII.
-- Mediana, CLAHE, Gaussiano, Sobel y selección de caracteres según brillo y borde.
+- `Parametros`, su validación y `Efecto<Mat>` / `Efecto<UMat>`: mismo núcleo Vitral Vivo.
+- Mediana, CLAHE, Gaussiano, Sobel, kernel propio y triángulos de color cuyo detalle depende del borde.
 - La lógica matemática procede de los ejemplos de clase; cámara, interfaz y mediciones se adaptan a cada plataforma.
 
 ## Qué cambia por plataforma
@@ -24,8 +24,8 @@ La versión móvil está en el repositorio independiente `App-movil-vision`. Man
 2. Cada `Efecto` posee sus búferes; no se procesa en paralelo sobre una misma instancia.
 3. La interfaz entrega una copia de los parámetros por fotograma.
 4. La salida Android es RGBA y mantiene las dimensiones de entrada requeridas por el Bitmap de cámara.
-5. La comparación encaja original y resultado completos sin recorte ni deformación. Las vistas intermedias siguen disponibles. El Portal ASCII mantiene la cámara original fuera del marco.
-6. Se sincroniza OpenCL antes de leer sus tiempos. La descarga ASCII transfiere la cuadrícula en lugar de la imagen completa. El dibujo con CPU entra en el total de cada ruta. Una ruta no disponible se informa como tal.
+5. La comparación encaja original y resultado completos. Portal Vitral mantiene la cámara original fuera del marco.
+6. La app ejecuta y mide cada modo por separado; OpenCL descarga los mapas reducidos de color y borde, y el dibujo CPU cuenta en el total.
 
 ## VTK de escritorio
 
@@ -35,6 +35,6 @@ La versión móvil está en el repositorio independiente `App-movil-vision`. Man
 
 En Android Studio se abre el repositorio Android y se ejecuta `app` sobre un dispositivo ARM64. Se utiliza OpenCV 5.0.0 con OpenCL, SDK37, NDK28.2.13676358 y CMake3.22.1.
 
-La compilación de APK, pruebas nativas/JVM y lint no sustituye una prueba física de permisos, cámaras, orientación y rendimiento. La versión ASCII todavía requiere prueba de cámara y rendimiento en el S25 Ultra. En esta revisión no se transfirieron archivos del teléfono. Los emuladores locales instalados son x86_64 y no ejecutan directamente el APK ARM64; no se modificó la arquitectura ni se fabricaron resultados móviles.
+La compilación de APK, pruebas nativas/JVM y lint no sustituye comprobar permisos, cámaras, orientación y rendimiento de Vitral Vivo en el S25 Ultra. No se conectó el teléfono. El APK es ARM64 y los emuladores locales son x86_64.
 
-La [evidencia y declaración de IA](ENTREGA_PARTE_I.md) están preparadas para la futura plantilla; el guion del videoblog describe ASCII. La grabación hablada en inglés la realizará el usuario después. La Parte II no está incluida.
+La [evidencia y declaración de IA](ENTREGA_PARTE_I.md) quedan para la futura plantilla. El guion en inglés describe Vitral Vivo. La Parte II no se incluye.

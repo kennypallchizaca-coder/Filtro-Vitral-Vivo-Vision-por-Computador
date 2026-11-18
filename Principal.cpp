@@ -68,7 +68,7 @@ const Imagen& escogerEtapa(const Efecto<Imagen>& efecto, int etapa) {
     }
 }
 
-// Asistencia de IA: OpenAI Codex separó filtrado, transferencia y dibujo ASCII para medirlos.
+// Asistencia de IA: OpenAI Codex separó filtrado, transferencia y dibujo del vitral para medirlos.
 Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa, Efecto<Mat>& cpu,
                       Efecto<UMat>& gpu, UMat& frameGPU, Mat& resultado) {
     Tiempos tiempos;
@@ -80,7 +80,7 @@ Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa
         if (modo == 0) {
             if (etapa == 0) {
                 inicio = Reloj::now();
-                resultado = dibujarAscii(cpu.cuadricula(), frame.size());
+                resultado = dibujarVitral(cpu.cuadricula(), frame.size());
                 tiempos.dibujo = milisegundos(inicio);
             } else {
                 resultado = escogerEtapa(cpu, etapa);
@@ -103,7 +103,7 @@ Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa
         ocl::finish();
         tiempos.gpu = milisegundos(inicio);
         inicio = Reloj::now();
-        CuadriculaAscii cuadricula;
+        CuadriculaVitral cuadricula;
         if (etapa == 0)
             cuadricula = gpu.cuadricula();
         else
@@ -112,7 +112,7 @@ Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa
         tiempos.bajada = milisegundos(inicio);
         if (etapa == 0) {
             inicio = Reloj::now();
-            resultado = dibujarAscii(cuadricula, frame.size());
+            resultado = dibujarVitral(cuadricula, frame.size());
             tiempos.dibujo = milisegundos(inicio);
         }
     }
@@ -196,7 +196,7 @@ int benchmark(VideoCapture& video, int cantidad, Size tamano, int modo, const Pa
 static void dibujarCabecera(Mat& lienzo, const EstadoInterfaz& estado, const Tiempos& t,
                            const MuestraRecursos& muestra, double fps) {
     static const array<string, 5> etapas = {
-        "ASCII", "Gris CLAHE + mediana", "Gaussiano", "Kernel propio",
+        "Vitral Vivo", "Gris CLAHE + mediana", "Gaussiano", "Kernel propio",
         "Mascara de contornos"};
     static const array<string, 3> modos = {"CPU Mat", "OpenCL UMat", "Comparar CPU / OpenCL"};
     const Scalar texto(25, 25, 25);
