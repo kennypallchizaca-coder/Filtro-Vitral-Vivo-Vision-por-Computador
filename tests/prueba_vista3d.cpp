@@ -32,24 +32,41 @@ Vec3b colorCentro(Vista3D& vista, double xMundo) {
     return captura.at<Vec3b>(y, x);
 }
 
-int main() {
+int main(int argc, char** argv) {
+    const bool leerColores = argc == 1;
+    assert(leerColores || (argc == 2 && string(argv[1]) == "--sin-captura"));
     Mat rojo(48, 64, CV_8UC3, Scalar(0, 0, 255));
     Mat verde(48, 64, CV_8UC3, Scalar(0, 255, 0));
     {
         Vista3D vista(rojo, rojo, true);
         assert(vista.actualizar(rojo, rojo));
-        Vec3b antes = colorCentro(vista, -0.98);
-        assert(antes[2] > 200 && antes[1] < 40);
-        assert(colorCentro(vista, 0.98)[2] > 200);
+        for (const auto* id : {"Marco arriba", "Marco abajo", "Marco izquierda", "Marco derecha"}) {
+            try {
+                assert(vista.visor.getWidget(id).getRenderingProperty(viz::REPRESENTATION) ==
+                       viz::REPRESENTATION_SURFACE);
+            } catch (const cv::Exception&) {
+                cerr << "Falta la pieza de la vitrina: " << id << '\n';
+                return 1;
+            }
+        }
+        if (leerColores) {
+            Vec3b antes = colorCentro(vista, -0.98);
+            assert(antes[2] > 200 && antes[1] < 40);
+            assert(colorCentro(vista, 0.98)[2] > 200);
+        }
         assert(vista.actualizar(verde, verde));
-        Vec3b despues = colorCentro(vista, -0.98);
-        assert(despues[1] > 200 && despues[2] < 40);
-        assert(colorCentro(vista, 0.98)[1] > 200);
+        if (leerColores) {
+            Vec3b despues = colorCentro(vista, -0.98);
+            assert(despues[1] > 200 && despues[2] < 40);
+            assert(colorCentro(vista, 0.98)[1] > 200);
+        }
         // La misma escena debe aceptar una textura nueva sin reiniciar su cámara.
         Affine3d pose = vista.visor.getViewerPose();
         assert(vista.actualizar(rojo, verde));
-        assert(colorCentro(vista, -0.98)[2] > 200);
-        assert(colorCentro(vista, 0.98)[1] > 200);
+        if (leerColores) {
+            assert(colorCentro(vista, -0.98)[2] > 200);
+            assert(colorCentro(vista, 0.98)[1] > 200);
+        }
         assert(norm(Mat(pose.matrix), Mat(vista.visor.getViewerPose().matrix)) == 0);
         Affine3d movida(Matx33d::eye(), Vec3d(0.1, 0, -5.6));
         vista.visor.setViewerPose(movida);
@@ -61,8 +78,10 @@ int main() {
     {
         Vista3D reabierta(verde, rojo, true);
         assert(reabierta.actualizar(verde, rojo));
-        assert(colorCentro(reabierta, -0.98)[1] > 200);
-        assert(colorCentro(reabierta, 0.98)[2] > 200);
+        if (leerColores) {
+            assert(colorCentro(reabierta, -0.98)[1] > 200);
+            assert(colorCentro(reabierta, 0.98)[2] > 200);
+        }
     }
     {
         namedWindow("Panel prueba", WINDOW_AUTOSIZE);
@@ -86,8 +105,10 @@ int main() {
         int visibles = 0;
         EnumWindows(contarVentanas, reinterpret_cast<LPARAM>(&visibles));
         assert(visibles == 1);
-        assert(colorCentro(vista, -0.98)[2] > 200);
-        assert(colorCentro(vista, 0.98)[1] > 200);
+        if (leerColores) {
+            assert(colorCentro(vista, -0.98)[2] > 200);
+            assert(colorCentro(vista, 0.98)[1] > 200);
+        }
         setTrackbarPos("Kernel", "Panel prueba", 7);
         assert(getTrackbarPos("Kernel", "Panel prueba") == 7);
         setTrackbarPos("Escala del vitral", "Panel prueba", 16);

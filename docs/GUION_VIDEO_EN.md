@@ -1,6 +1,12 @@
 # Vitral Vivo: live stained-glass video effect
 
-Estimated spoken duration: 6–7 minutes. Record the actual desktop and phone application. The bracketed directions are filming cues, not spoken text. This file is a script, not a completed video.
+Estimated duration with demonstrations: 6–7 minutes. Record the actual desktop and phone application. The bracketed directions are filming cues, not spoken text. This is a script, not a recorded video.
+
+## Before recording
+
+- Open the Release build on the PC and check that the camera or input video runs. Rehearse rotating the VTK frame, pressing **R** to reset it, and using **T** to show a processing stage.
+- On the S25, start in **Comparación completa**. Use **Gaussiano** to show an intermediate image, then go back to the comparison before reading measurements.
+- Keep the input, view and filter settings unchanged while switching CPU to OpenCL. Wait for both readings and for the app to show **GPU / OpenCL** as the active mode. If it falls back to CPU, say so instead of presenting that sample as GPU.
 
 ## 1. Objective
 
@@ -30,7 +36,7 @@ Our kernel is based on a Laplacian edge detector. Its center is positive and sel
 
 The coefficients add up to zero. For example, when every pixel in a neighborhood has the same brightness, its response is zero. A change in brightness can produce a nonzero response.
 
-We keep the signed response in a floating-point image, then take its absolute value and add a fixed gain to bring it closer to Sobel's scale. The weight control mixes the two; the resulting mask reveals smaller facets near edges.
+We keep the signed response in a floating-point image, then multiply its absolute value by twelve to bring it closer to Sobel's scale. The weight control mixes the two; the resulting mask reveals smaller facets near edges.
 
 ## 4. Drawing the stained glass
 
@@ -42,11 +48,11 @@ Near edges we gradually reveal smaller facets inside the same triangles. The mes
 
 ## 5. Desktop, controls and 3D
 
-[Show the sliders and resource readings. Rotate the VTK scene while the video changes.]
+[Show the sliders and readings, then rotate the scene so the depth of the frame is visible.]
 
-One white desktop window contains seven sliders, resource measurements and both images. A real VTK viewport is embedded in this window, so the processed video is still a dynamic 3D texture rather than a screenshot copied into a two-dimensional display.
+The desktop window contains seven sliders, resource readings and both images. VTK displays the video as a dynamic texture in that same window.
 
-Following the classroom examples, copyTo places the original and processed images in two rectangular regions of one Mat. This combined image is the texture of one plane. It updates on every loop. The program keeps the same scene and camera pose, so rotating it does not reset the view on the next frame. R restores the initial view, and Escape closes the application. This is a textured plane, not a three-dimensional reconstruction of the person.
+Following the classroom examples, copyTo places the original and processed images in two rectangular regions of one Mat. This combined image is the texture of one plane. It updates on every loop. The program keeps the same scene and camera pose, so rotating it does not reset the view on the next frame. R restores the initial view, and Escape closes the application. Four solid bars give the frame real depth. The video is a flat texture, not a three-dimensional reconstruction of the person.
 
 The Gaussian kernel size changes the computational load. It is always an odd number. Other controls change sigma, the custom response weight, the threshold, the cell size and CLAHE contrast.
 
@@ -68,7 +74,7 @@ OpenCL is not always faster. Transfers, image size, operation support and kernel
 
 On Android, Kotlin manages the camera, controls and lifecycle. JNI connects the interface to the same C++ effect.
 
-The camera supplies RGBA images. C++ converts them to BGR for processing and returns RGBA with the original dimensions. The comparison fits both complete images without stretching or cropping them.
+The camera supplies RGBA images. C++ converts them to BGR for processing and returns RGBA with the original dimensions. The comparison keeps the complete original on the left and the stained-glass result on the right in both orientations, without stretching or cropping.
 
 Android runs one mode at a time and keeps the latest complete sample for each. We show processing time, preview FPS, process CPU and memory. We do not export results. A CPU fallback is labeled and not reported as an OpenCL sample.
 

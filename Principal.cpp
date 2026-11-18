@@ -72,20 +72,14 @@ const Imagen& escogerEtapa(const Efecto<Imagen>& efecto, int etapa) {
 Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa, Efecto<Mat>& cpu,
                       Efecto<UMat>& gpu, UMat& frameGPU, Mat& resultado) {
     Tiempos tiempos;
+    CuadriculaVitral cuadricula;
     if (modo != 1) {
         ocl::setUseOpenCL(false);
         auto inicio = Reloj::now();
         cpu.procesar(frame, p);
         tiempos.cpu = milisegundos(inicio);
-        if (modo == 0) {
-            if (etapa == 0) {
-                inicio = Reloj::now();
-                resultado = dibujarVitral(cpu.cuadricula(), frame.size());
-                tiempos.dibujo = milisegundos(inicio);
-            } else {
-                resultado = escogerEtapa(cpu, etapa);
-            }
-        }
+        if (modo == 0 && etapa != 0)
+            resultado = escogerEtapa(cpu, etapa);
     }
     if (modo != 0) {
         ocl::setUseOpenCL(true);
@@ -103,18 +97,19 @@ Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa
         ocl::finish();
         tiempos.gpu = milisegundos(inicio);
         inicio = Reloj::now();
-        CuadriculaVitral cuadricula;
         if (etapa == 0)
             cuadricula = gpu.cuadricula();
         else
             escogerEtapa(gpu, etapa).copyTo(resultado);
         ocl::finish();
         tiempos.bajada = milisegundos(inicio);
-        if (etapa == 0) {
-            inicio = Reloj::now();
-            resultado = dibujarVitral(cuadricula, frame.size());
-            tiempos.dibujo = milisegundos(inicio);
-        }
+    }
+    if (etapa == 0) {
+        const auto inicio = Reloj::now();
+        if (modo == 0)
+            cuadricula = cpu.cuadricula();
+        resultado = dibujarVitral(cuadricula, frame.size());
+        tiempos.dibujo = milisegundos(inicio);
     }
     return tiempos;
 }

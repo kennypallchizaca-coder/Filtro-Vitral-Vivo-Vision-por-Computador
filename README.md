@@ -32,7 +32,7 @@ K(a) =     [ -1   4+2a     -1 ] / (4+2a)
 
 La ventana usa `Lienzo` con `WINDOW_AUTOSIZE`, como el Ejemplo 7. Original y efecto se copian con `copyTo` a dos regiones `Rect` de un mismo `Mat`, siguiendo los Ejemplos 6 y 7. Las barras se crean con `createTrackbar` y se leen con `getTrackbarPos`, como en el Ejemplo 3.
 
-Ese `Mat` se aplica como textura a un plano `WImage3D`. `setImage` la actualiza en cada vuelta y `spinOnce` atiende eventos sin detener el ciclo de cámara. El visor VTK real se integra como ventana hija de `Lienzo` mediante las API nativas de Windows; no se reemplaza por una captura de pantalla. Este puente no procede de los ejemplos del profesor. No se reconstruye el widget ni se restablece su cámara entre fotogramas. Arrastrar permite rotar la escena y `R` vuelve a encuadrarla. Esc o cerrar `Lienzo` termina toda la aplicación. El plano no reconstruye la profundidad de la escena capturada.
+Ese `Mat` se aplica como textura a un plano `WImage3D`. `setImage` la actualiza en cada vuelta y `spinOnce` atiende eventos sin detener el ciclo de cámara. El visor VTK real se integra como ventana hija de `Lienzo` mediante las API nativas de Windows; no se reemplaza por una captura de pantalla. Este puente no procede de los ejemplos del profesor. No se reconstruye el widget ni se restablece su cámara entre fotogramas. Cuatro barras oscuras forman un marco con relieve fuera de la textura, sin actualizarse por fotograma. Arrastrar muestra su profundidad y `R` recupera el encuadre. Esc o cerrar `Lienzo` termina toda la aplicación. El plano no reconstruye la profundidad de la escena capturada.
 
 ## Compilar y ejecutar
 
@@ -114,4 +114,4 @@ La interfaz muestra tiempos CPU y OpenCL, transferencias GPU, FPS del ciclo visi
 - [Estado, resultados de Vitral Vivo y declaración de IA](docs/ENTREGA_PARTE_I.md).
 - [Datos históricos y metadatos del informe](docs/mediciones/metadatos.json): seis casos CPU/OpenCL, 120 muestras por caso y kernels 5, 31 y 51 sobre el mismo clip sintético. No son mediciones del teléfono ni de la cámara en vivo.
 - [Guion del videoblog en inglés](docs/GUION_VIDEO_EN.md). La grabación la realizará el usuario; el guion no sustituye al video.
-- `tests/prueba_vista3d.cpp` verifica texturas dinámicas, pose, reapertura, integración en una sola ventana, posición del panel, trackbars y cierre del padre mediante renderizado real. Se habilita con `-DBUILD_TESTING=ON` al configurar CMake y se ejecuta con `ctest --test-dir build --output-on-failure`; no es necesario para abrir la aplicación.
+- `tests/prueba_vista3d.cpp` verifica texturas dinámicas, pose, reapertura, integración en una sola ventana, posición del panel, trackbars y cierre del padre mediante renderizado real. Se habilita con `-DBUILD_TESTING=ON` al configurar CMake y se ejecuta con `ctest --test-dir build --output-on-failure -LE captura` para verificar el marco y el visor sin capturas; no es necesario para abrir la aplicación.

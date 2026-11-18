@@ -33,6 +33,7 @@ struct Vista3D {
         poseInicial = cv::Affine3d(cv::Matx33d::eye(), cv::Vec3d(0, 0, -5.6));
         visor.setViewerPose(poseInicial);
         visor.showWidget("Comparacion", imagen);
+        mostrarMarco(tamano(frame));
         visor.registerKeyboardCallback(teclado, this);
     }
 
@@ -91,9 +92,11 @@ struct Vista3D {
             posicionAnterior = posicion;
         }
         if (nueva) {
-            double alto =
-                std::max(3.7 * lienzo.rows / lienzo.cols, 3.7 * posicion.height / posicion.width);
-            double distancia = 1.08 * alto / (2 * std::tan(visor.getCamera().getFov()[1] / 2));
+            const double anchoExterior = anchoTextura + 2 * bordeMarco;
+            const double altoExterior = anchoTextura * lienzo.rows / lienzo.cols + 2 * bordeMarco;
+            const double alto = std::max(altoExterior, anchoExterior * posicion.height / posicion.width);
+            const double distancia = 1.08 * alto / (2 * std::tan(visor.getCamera().getFov()[1] / 2))
+                                    + profundidadMarco / 2;
             poseInicial = cv::Affine3d(cv::Matx33d::eye(), cv::Vec3d(0, 0, -distancia));
             visor.setViewerPose(poseInicial);
             visor.spinOnce(1, true);
@@ -101,7 +104,24 @@ struct Vista3D {
     }
 
    private:
+    static constexpr double anchoTextura = 3.7;
+    static constexpr double bordeMarco = 0.06;
+    static constexpr double profundidadMarco = 0.24;
     cv::Rect posicionAnterior;
+
+    // Asistencia de IA (OpenAI Codex): el marco queda fuera de la textura y se crea una sola vez.
+    void mostrarMarco(cv::Size2d textura) {
+        const double x = textura.width / 2, y = textura.height / 2;
+        const double z = profundidadMarco / 2;
+        const cv::viz::Color grafito(55, 51, 48);
+        auto barra = [&](const char* id, double x0, double y0, double x1, double y1) {
+            visor.showWidget(id, cv::viz::WCube({x0, y0, -z}, {x1, y1, z}, false, grafito));
+        };
+        barra("Marco arriba", -x - bordeMarco, y, x + bordeMarco, y + bordeMarco);
+        barra("Marco abajo", -x - bordeMarco, -y - bordeMarco, x + bordeMarco, -y);
+        barra("Marco izquierda", -x - bordeMarco, -y, -x, y);
+        barra("Marco derecha", x, -y, x + bordeMarco, y);
+    }
 
     // Une original y efecto con regiones Rect, como en los Ejemplos 6 y 7.
     cv::Mat& componer(const cv::Mat& frame, const cv::Mat& resultado) {
@@ -118,7 +138,7 @@ struct Vista3D {
     static cv::Size2d tamano(const cv::Mat& imagen) {
         if (imagen.empty())
             throw std::invalid_argument("La textura 3D requiere una imagen no vacia");
-        return cv::Size2d(3.7, 1.85 * imagen.rows / imagen.cols);
+        return cv::Size2d(anchoTextura, (anchoTextura / 2) * imagen.rows / imagen.cols);
     }
 
     static void teclado(const cv::viz::KeyboardEvent& evento, void* datos) {

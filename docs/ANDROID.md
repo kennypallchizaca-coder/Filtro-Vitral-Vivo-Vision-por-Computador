@@ -29,12 +29,12 @@ La versión móvil está en el repositorio independiente `App-movil-vision`. Man
 
 ## VTK de escritorio
 
-`Vista3D.hpp` combina original y efecto con `Mat`, `Rect` y `copyTo`, y actualiza la textura de un plano mediante `setImage` y `spinOnce`. El visor VTK real está integrado en la única ventana blanca Lienzo, junto a las barras y métricas. Arrastrar gira la escena, `R` restaura el encuadre y Esc cierra la aplicación. La prueba verifica colores, pose, reapertura, posición del panel, una sola ventana y cierre seguro. Esta integración es exclusiva del escritorio Windows; no modifica Android.
+`Vista3D.hpp` combina original y efecto con `Mat`, `Rect` y `copyTo`, y actualiza la textura de un plano mediante `setImage` y `spinOnce`. El visor VTK real está integrado en la única ventana blanca Lienzo, junto a las barras y métricas. Arrastrar gira la escena, `R` restaura el encuadre y Esc cierra la aplicación. La prueba sin capturas verifica pose, reapertura, posición del panel, una sola ventana y cierre seguro. No valida píxeles renderizados. Esta integración es exclusiva del escritorio Windows; no modifica Android.
 
 ## Compilación y comprobación móvil
 
 En Android Studio se abre el repositorio Android y se ejecuta `app` sobre un dispositivo ARM64. Se utiliza OpenCV 5.0.0 con OpenCL, SDK37, NDK28.2.13676358 y CMake3.22.1.
 
-La compilación de APK, pruebas nativas/JVM y lint no sustituye comprobar permisos, cámaras, orientación y rendimiento de Vitral Vivo en el S25 Ultra. No se conectó el teléfono. El APK es ARM64 y los emuladores locales son x86_64.
+El APK ARM64 se probó en un S25 Ultra: instrumentación JNI, cámara en vertical y horizontal, selector de etapas y conmutación CPU/OpenCL con las dos muestras visibles. Se confirmó la Adreno 830; hubo un intento horizontal con respaldo CPU que no se repitió en la comprobación siguiente. No se hizo un benchmark controlado ni una revisión de todas las combinaciones de permisos y cámaras. Los emuladores locales x86_64 no se usaron.
 
 La [evidencia y declaración de IA](ENTREGA_PARTE_I.md) quedan para la futura plantilla. El guion en inglés describe Vitral Vivo. La Parte II no se incluye.

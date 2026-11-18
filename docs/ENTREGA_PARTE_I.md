@@ -1,12 +1,28 @@
 # Vitral Vivo — Parte I
 
-Vitral Vivo reemplaza el ASCII por una malla estable de triángulos de color y uniones oscuras. Sobel y el kernel propio, calibrado antes de la mezcla, realzan subdivisiones sin mover sus vértices. Se conservan mediana, CLAHE, Gaussiano, los controles dinámicos, la textura VTK y la comparación original/efecto con vistas intermedias en Android. Ambos repositorios contienen el mismo `Principal.hpp`.
+## Introducción y problema
+
+Vitral Vivo convierte video en un mosaico de triángulos. El problema es conservar los contornos importantes sin que la malla cambie entre fotogramas, y comparar CPU con OpenCL usando el mismo algoritmo. Se implementó en escritorio (C++ y OpenCV/VTK) y Android (Kotlin y C++ por JNI). Ambas aplicaciones comparten el núcleo `Principal.hpp`.
+
+## Propuesta y esquema
+
+```text
+Fotograma BGR ─┬─ Color original → mapa de color ───────────────────┐
+              └─ Gris → Mediana → CLAHE → Gaussiano                │
+                        → Sobel + kernel propio → máscara ────────┤
+                                                                   ↓
+                                   Malla fija → Vitral Vivo → vista
+```
+
+La mediana reduce ruido impulsivo, CLAHE ajusta el contraste local y el Gaussiano suaviza antes de calcular bordes. Sobel combina las magnitudes horizontal y vertical. El kernel propio tiene centro positivo y pesos negativos en los vecinos. Sus coeficientes suman cero; una región uniforme se cancela. La magnitud de su respuesta se multiplica por 12 antes de mezclarla con Sobel: `E = (1−w)·S + w·H`. `S` es la respuesta de Sobel, `H` la del kernel calibrado y `w` el peso del kernel.
+
+La máscara resultante hace más visibles las subdivisiones sin mover los vértices. Los triángulos toman el color del fotograma original. VTK actualiza el plano de video dentro de un marco de cuatro barras con grosor. Android conserva original a la izquierda, vitral a la derecha y selección de etapas.
 
 ## Requisitos y verificación de la Parte I (18 de noviembre de 2026)
 
-- **Escritorio:** Release y 3/3 pruebas sin ventana. Se comprobó en VTK la actualización de textura, la conservación de la pose, las barras, el ciclo de vistas y el cierre, con una sonda que omitió la lectura de píxeles. No se ejecutó la prueba original que llama a `getScreenshot`. En un fotograma sintético de 640×480, CPU y OpenCL activo en la RTX 4070 tuvieron diferencias máximas por canal de 0, 4 y 4 sobre 255 para los kernels gaussianos 5, 31 y 51. Falta la demostración con cámara y carga GPU en vivo.
-- Android: APK ARM64 y APK de instrumentación compilados offline, 3/3 pruebas JVM, 11/11 comprobaciones estáticas y de empaquetado, 1/1 prueba nativa en Windows con OpenCL y prueba adicional de respaldo CPU. Lint: 0 errores, 8 advertencias. No se ejecutó instrumentación en el teléfono.
-- En Android, CPU/Mat y GPU/OpenCL tienen ventanas separadas; la pantalla conserva la última muestra completa de cada ruta y no cuenta el respaldo como OpenCL. Falta probar cámara, disponibilidad efectiva de OpenCL y rendimiento de Vitral Vivo en el S25 Ultra.
+- **Escritorio:** compilación Release y 4/4 pruebas sin capturas. La prueba estructural de la vitrina comprueba actualización de textura, pose, controles y cierre sin leer píxeles; no se ejecutó la prueba que llama a `getScreenshot`. En un fotograma sintético de 640×480, CPU y OpenCL activo en la RTX 4070 tuvieron diferencias máximas por canal de 0, 4 y 4 sobre 255 para los kernels gaussianos 5, 31 y 51. Falta la demostración con cámara y carga GPU en vivo.
+- **Android:** APK ARM64 y APK de instrumentación compilados offline. Pasaron 3/3 pruebas JVM, 12/12 comprobaciones estáticas, 1/1 prueba nativa en Windows con OpenCL y 1/1 prueba instrumentada en el S25 Ultra. Lint: 0 errores, 8 advertencias.
+- **Prueba en el S25 Ultra:** cámara en vertical y horizontal, con original a la izquierda y vitral a la derecha. Se corrigió la pérdida de muestras al cambiar de modo separando el panel de métricas de la vista de cámara. Se verificó en ambas orientaciones que se pueden conservar las muestras de CPU y OpenCL y que OpenCL usa la Adreno 830. En un intento horizontal se observó respaldo CPU; la repetición confirmó OpenCL y no registró reinicio de cámara al cambiar de modo. Esta prueba funcional no sustituye un benchmark controlado.
 - **Web:** no hay una aplicación web en los repositorios suministrados. La guía p. 1 pide un informe en Web 2.0 o similar; la Parte I (pp. 3–8) exige escritorio y Android. Falta trasladar estos resultados, un esquema, gráficas y conclusiones a la plantilla académica.
 - **Sustentación:** [guía y ocho preguntas](DEFENSA_CODIGO.md) y [guion en inglés](GUION_VIDEO_EN.md). El videoblog no está grabado. No se ha comprobado si otro grupo usa la misma combinación artística.
 
@@ -25,6 +41,19 @@ Mismo clip sintético MJPG de 180 fotogramas, 640×480, SHA-256 `5A79D866C2AFD44
 
 El total incluye dibujo del vitral en CPU y, en OpenCL, transferencias. Los FPS son de procesamiento, no de cámara ni de la ventana con VTK; la RAM es el Working Set del proceso, no VRAM. Para repetir la comparación con un clip fijo, usa `--benchmark --source=ruta.avi --frames=120 --kernel=5 --mode=cpu`; cambia el modo a `gpu` y repite con kernels 31 y 51.
 
+![CPU frente a OpenCL: FPS de procesamiento y RAM máxima del proceso por tamaño de Gaussiano](benchmark-vitral-escritorio.png)
+
+## Conclusiones
+
+En el clip sintético OpenCL redujo el tiempo de procesamiento en los tres tamaños y el proceso usó más RAM. Esa prueba no demuestra menor VRAM ni mayor FPS de cámara. El mismo filtro produce el vitral en ambas plataformas y el dibujo de sus piezas se mantiene en CPU. En el S25 se comprobó OpenCL y la conservación de ambas muestras al cambiar de modo.
+
+## Antes de entregar
+
+- **Escritorio:** muestra la cámara o el mismo video fijo en ambos modos. Usa los mismos parámetros, vista y resolución. Muestra la vitrina de frente y de lado; `R` restaura la vista. Anota milisegundos, FPS del panel y RAM en CPU y en OpenCL. El contador de actividad GPU del proceso puede incluir VTK y no aísla el cómputo.
+- **S25 Ultra:** muestra «Comparación completa» y una etapa intermedia. Regresa a la vista elegida antes de medir. En CPU espera una muestra; luego elige GPU sin mover la escena ni cambiar controles. Usa su fila GPU solo cuando el modo activo confirme **GPU / OpenCL**. La RAM PSS no es VRAM.
+- **Informe:** pasa este borrador a la plantilla y grafica por separado los valores en vivo. La figura de esta página contiene resultados sintéticos, no FPS del visor o del S25. Confirma la política del AVAC y si el docente requiere una medición de VRAM dedicada.
+- **Videoblog:** usa el [guion en inglés](GUION_VIDEO_EN.md) y las [preguntas de práctica](DEFENSA_CODIGO.md). El guion no está grabado.
+
 ## Herramientas y Asistencia de IA
 
 La guía (pp. 1–2) permite la asistencia con cita; el estudiante debe poder explicar el código y su matemática. La rúbrica de Parte I (p. 8) no enumera esta tabla de prompts como un apartado obligatorio. Se incluye por transparencia y a petición del estudiante. La política complementaria del AVAC y la plantilla todavía no se han proporcionado.
@@ -32,78 +61,19 @@ La guía (pp. 1–2) permite la asistencia con cita; el estudiante debe poder ex
 | Herramienta y fragmento literal | Adaptación realizada | Verificación |
 |---|---|---|
 | OpenAI Codex: «Sí, cambia el ASCII por el vitral de triángulos con malla estable en los dos proyectos.» | Malla determinista, muestreo de color, uniones oscuras y detalle en bordes en `Principal.hpp`. Calibración del kernel propio antes de su mezcla con Sobel. | Se verificó que ambos `Principal.hpp` son idénticos; pruebas del color, estabilidad de la malla y detección a peso alto. Prueba de paridad con OpenCL activo en el PC. |
-| OpenAI Codex: «Que cumpla la guía y que Android mida CPU y OpenCL por separado.» | Selección de una ruta en `MainActivity.kt` y ventanas independientes en `Mediciones.kt`. El respaldo CPU no se contabiliza como GPU. | Prueba JVM del reinicio de ventana y prueba nativa con GPU y sin OpenCL en Windows. Todavía no hay mediciones de Vitral Vivo en el teléfono. |
+| OpenAI Codex: «Que cumpla la guía y que Android mida CPU y OpenCL por separado.» | Selección de una ruta en `MainActivity.kt` y ventanas independientes en `Mediciones.kt`. El respaldo CPU no se contabiliza como GPU. | Prueba JVM del reinicio de ventana y prueba nativa con GPU y sin OpenCL en Windows. Se observaron muestras funcionales en el S25; falta una comparación controlada para el informe. |
 | OpenAI Codex con subagentes: «Con la ayuda de subagetes Revisa, corrige y organiza mi proyecto de Visión por Computador». | Revisión separada de escritorio, Android y alcance web; se corrigieron las descripciones obsoletas de la medición. No se rehízo el filtro ni se creó una app web. | Compilación y pruebas de PC, comparación con la guía local y verificación del historial de las ramas, sin modificar `main`. |
 
 No se reconstruyeron prompts previos que no estén disponibles ni se atribuyó automáticamente la autoría de ejemplos de clase. La contribución exacta de bloques antiguos queda pendiente de confirmación. Las declaraciones de la versión anterior se conservan abajo.
 
-## Registro histórico: versión ASCII sustituida
-
-Las cifras, pruebas y prompts que siguen corresponden al filtro anterior. Se conservan para trazabilidad y no se deben presentar como evidencia de Vitral Vivo.
-
-La guía vigente es `Guia-Proyecto-Integrador-Visión-Artificial-G9_.pdf`, en `Vision-Computador/Proyectos/Proyecto-Integrador-G9`. Las páginas 3–8 contienen el alcance y la rúbrica del interciclo. El ejemplo tipo Sketch no obliga a copiar un estilo. El efecto elegido para esta entrega es ASCII.
-
-### Requisitos y estado en la revisión ASCII
-
-| Requisito | Estado comprobado |
-|---|---|
-| Escritorio C++/OpenCV y Android con C++ nativo por JNI (pp. 4 y 7) | Ejecutable y APK ARM64 compilados; el núcleo `Principal.hpp` es idéntico en ambos repositorios. |
-| Cuatro filtros de clase, kernel propio justificado y modificación de píxeles (pp. 3–4 y 7) | Mediana, CLAHE, Gaussiano, Sobel y `filter2D`; se usa brillo para elegir símbolos y se aumenta un nivel al detectar borde. [Explicación y preguntas](DEFENSA_CODIGO.md). |
-| Mat/UMat con OpenCL, controles dinámicos de tamaño y peso, tiempo/RAM/recursos (pp. 3–4 y 7–8) | Se comparó con video sintético en Windows y se seleccionó la RTX 4070 con OpenCL. En Android están los controles y métricas; se comprobó el núcleo móvil en el PC, no el OpenCL del teléfono. |
-| Escritorio VTK: textura de video que se actualiza sobre una primitiva 3D (pp. 4 y 7–8) | Original y ASCII en un mismo lienzo con un plano VTK. Prueba de textura/pose/cierre y revisión visual con video sintético. No reconstruye profundidad. |
-| Móvil: original y final simultáneos, selector de intermedios (p. 8) | Prueba nativa de composición horizontal/vertical y vistas; selector y controles comprobados por código/XML. Falta revisar la interfaz renderizada, permisos, reinicio, cámaras y rotación en el S25 Ultra. |
-| Informe con diagrama, justificación, gráficas CPU/GPU de FPS y memoria, fuentes y conclusiones (p. 8) | La tabla y las fuentes siguientes alimentan la futura plantilla. El HTML se retiró a petición del usuario. No hay una aplicación web exigida en la Parte I; «Web 2.0 o similar» se refiere al informe (p. 1). |
-| Videoblog hablado en inglés (pp. 1 y 8) | [Guion](GUION_VIDEO_EN.md) disponible; grabación pendiente. |
-
-No se ha comprobado que otro grupo no utilice la misma combinación artística. Durante la demostración, mostrar el peso propio y tamaño del Gaussiano con la misma fuente en ambos modos. La actividad GPU del proceso visible en el panel incluye VTK y no mide por separado la utilización de un kernel OpenCL.
-
-### Verificaciones de la revisión ASCII
-
-- **Escritorio:** CMake Release y CTest **4/4**. La CLI rechaza opciones desconocidas y conserva `--help`/`-h`. La prueba de benchmark elimina su propio video temporal. Antes del ajuste de las letras se comprobaron Lienzo, `T`, Espacio y el deslizador ASCII. Para el acabado de terminal se verificó el resultado desde una foto de prueba, sin capturar la pantalla. No se usó webcam ni se probaron otros monitores o escalas DPI.
-- **Android:** pruebas estáticas **11/11**, CTest nativo **1/1** en Windows con la RTX 4070, Gradle debug y APK de instrumentación compilados, **2/2** pruebas JVM y lint sin errores (8 advertencias). La prueba estática de reinicio falló antes de restablecer la visibilidad del mensaje de espera y pasó después. La consulta JNI de estado GPU ahora se realiza cuando la interfaz va a actualizarse, no en todos los fotogramas. No se ejecutó instrumentación ni se midieron tiempos en un teléfono.
-- **Alcance web:** no se construyó ni se probó una aplicación web. El único HTML identificado era el informe sustituido por la futura plantilla.
-
-### Datos históricos de escritorio
-
-Medición del 17 de noviembre de 2026. Mismo clip sintético local, MJPG, 240 fotogramas, 640×480; SHA-256 `D280B824B383003DA2398498782E921DC80B7D6FC27D8F624AF3D74FB90DC118`. OpenCV 5.0.0, CPU AMD Ryzen 9 7845HX, NVIDIA GeForce RTX 4070 Laptop GPU con controlador 617.42. Cada fila corresponde a un proceso separado, con calentamiento y 120 muestras; valores restantes predeterminados. No se exportó CSV.
-
-| Gaussiano | Modo | Filtrado medio (ms) | Proceso medio (ms) | FPS de proceso | RAM máxima (MiB) |
-|---:|---|---:|---:|---:|---:|
-| 5 | CPU | 2,00 | 2,74 | 364,55 | 89,25 |
-| 5 | OpenCL | 1,29 | 2,17 | 460,10 | 204,87 |
-| 31 | CPU | 2,70 | 3,67 | 272,34 | 88,97 |
-| 31 | OpenCL | 1,28 | 2,17 | 461,82 | 205,45 |
-| 51 | CPU | 4,16 | 5,13 | 194,91 | 89,15 |
-| 51 | OpenCL | 1,29 | 2,18 | 459,53 | 205,03 |
-
-El tiempo total incluye el dibujo ASCII en CPU; OpenCL incluye además subida y descarga. FPS de proceso es `1000 / ms medio` antes del redondeo; no es FPS real de cámara ni incluye VTK. RAM es el Working Set del proceso, no VRAM. En este clip la ruta OpenCL procesó más rápido y usó más RAM; no se extrapola al S25. Los datos en `docs/mediciones` son de la versión anterior, no se mezclan con esta tabla.
-
-Para reproducir, usar `--benchmark --source=ruta-del-video.avi --frames=120 --kernel=5 --mode=cpu`, repetir con `--mode=gpu` y cambiar el tamaño de 5 a 31 y 51. En las gráficas usar el tamaño horizontal y series separadas CPU/OpenCL para FPS de proceso y RAM máxima.
-
-### Asistencia de IA en la versión ASCII
-
-El informe anterior declaraba:
-
-> Asistencia de desarrollo: OpenAI ChatGPT/Codex, utilizada para propuestas de implementación, revisión, explicación, pruebas y preparación de documentación. Las decisiones y resultados se contrastan con código y ejecuciones; la asistencia no sustituye la comprensión del trabajo.
-
-**Herramienta usada en esta fase:** OpenAI Codex, con el contexto de la conversación. Los siguientes son fragmentos literales comprobables, no una reconstrucción de prompts antiguos.
-
-| Petición | Adaptación y comprobación |
-|---|---|
-| «IMPLEMETEMOS ESO Y ELIMINES EL COMIC YA QUE NO ME GUSTO» | Se sustituyó el acabado cómic por luminancia y símbolos de borde; se conservaron kernel, filtros de clase, métricas, VTK y vistas Android. Las pruebas comprueban símbolos, tamaño de salida, respuesta del kernel y navegación de resultados. |
-| «Revisa, corrige y organiza mi proyecto de Visión por Computador, incluyendo **la aplicación de escritorio, la aplicación web y la aplicación móvil**.» | Se contrastó el alcance con la guía vigente. Se añadieron regresiones para opciones desconocidas y espera al reiniciar cámara, se verificaron compilaciones y se identificó en código la asistencia comprobable. |
-| «elimanlo porque ya te voy a paasr la plantilla y ahi va hacerce el informe» | Se retiró el HTML y se conservaron la declaración, las fuentes y los resultados en este material para trasladarlos a la plantilla. No se creó una web nueva. |
-| «EL RESULTADO NO ESTA ASI» (con una muestra del retrato ASCII) | Se sustituyeron las rayas direccionales por una escala de caracteres verdes según el brillo. El kernel sigue influyendo en la densidad de celdas con borde. Se compiló y verificó en ambas plataformas y se volvió a medir el rendimiento en el PC. |
-
-Bloques identificados: núcleo ASCII `Principal.hpp` en ambos repositorios; medición del dibujo y validación de opciones en `Principal.cpp`; barras ASCII en `Interfaz.hpp`; vistas, temporización y JNI en `ProcesadorAndroid.hpp`/`native-lib.cpp`; parámetros y estado de la cámara en Kotlin. **Pendiente de confirmar con el estudiante:** prompts de etapas previas no preservados, contribución exacta por bloque antiguo y política separada publicada en el AVAC, no aportada aquí como documento local. No se atribuye automáticamente a IA el material docente ni se afirma una autoría individual solo por el historial Git.
-
-Las pp. 1–2 de la guía permiten asistencia de IA con cita y exigen comprender y explicar el código y su matemática. La declaración de prompts se incluye por petición del estudiante; la rúbrica de la Parte I no la enumera como apartado obligatorio. Antes de entregar, el estudiante debe verificar la política complementaria y ajustar esta declaración si corresponde.
-
-## Fuentes para trasladar a la plantilla
+## Bibliografía y fuentes de clase
 
 - V. Robles Bykbaev, `Guía Proyecto Integrador G9`, octubre de 2026–febrero de 2027, pp. 1–8. Conformación y captura: Unidad 1, Ejemplo 2 (conversión en línea 37; captura en línea 51); trackbars del Ejemplo 3, líneas 47–53.
 - Material de Unidad 2: Ejemplo 5 (CLAHE, mediana y regiones `Rect`, líneas 37, 121–145), Ejemplo 6 (Gaussiano, Sobel y magnitudes, líneas 65–82), Ejemplo 9 (mediana para ruido impulsivo, líneas 130–136). Se adaptan operaciones, no se copia el programa entero.
 - K. Pulli et al. (2012), [Realtime Computer Vision with OpenCV](https://research.nvidia.com/publication/2012-06_realtime-computer-vision-opencv), `Communications of the ACM`.
 - S. M. Pizer et al. (1987), [Adaptive histogram equalization and its variations](https://doi.org/10.1016/S0734-189X(87)80186-X), `Computer Vision, Graphics, and Image Processing` 39(3), 355–368.
 - [OpenCV: soporte OpenCL](https://docs.opencv.org/4.x/dc/d83/group__core__opencl.html). Se contrastaron los encabezados de la versión instalada 5.0.0 para Mat, UMat, `WImage3D::setImage` y `CommandLineParser`. OpenCV Android SDK aporta `JavaCamera2View` y las bibliotecas nativas; Kotlin/AndroidX gestionan interfaz y ciclo de vida.
-- Sony Pictures Imageworks, [Spider-Man: Into the Spider-Verse](https://dev.imageworks.com/node/1371), citado en el informe anterior como referencia estética histórica. No aporta código al filtro ASCII.
+
+## Anexo
+
+El [histórico ASCII](HISTORICO_ASCII.md) conserva los datos y declaraciones de la versión sustituida. No se usa como evidencia de Vitral Vivo.
