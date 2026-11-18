@@ -30,7 +30,7 @@ Our kernel is based on a Laplacian edge detector. Its center is positive and sel
 
 The coefficients add up to zero. For example, when every pixel in a neighborhood has the same brightness, its response is zero. A change in brightness can produce a nonzero response.
 
-We keep the signed response in a floating-point image before calculating its absolute value. The own-weight parameter mixes this response with Sobel. Finally, a threshold creates the mask that determines which cells use directional characters.
+We keep the signed response in a floating-point image before calculating its absolute value. The own-weight parameter mixes this response with Sobel. A threshold creates the mask that identifies areas where we want to add one step of character density.
 
 ## 4. Drawing the ASCII frame
 
@@ -38,7 +38,7 @@ We keep the signed response in a floating-point image before calculating its abs
 
 We split the frame into a grid. A dark cell uses a sparse character or a space. A bright cell uses a dense symbol, such as the at sign.
 
-When the contour mask detects enough edge pixels in a cell, we choose a vertical, horizontal, or diagonal character based on the direction from Sobel. We draw each symbol once with putText, then copy it into the matching cells. Smaller cells preserve more detail.
+When the edge mask covers about ten percent of a cell, we move one step up the same brightness scale. We draw thicker green symbols on a dark background. Each symbol is drawn at double size with putText, reduced to fit its cell, and copied into the grid. Smaller cells preserve more detail.
 
 ## 5. Desktop, controls and 3D
 

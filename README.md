@@ -5,10 +5,10 @@ La aplicación de escritorio convierte video de cámara o archivo en un retrato 
 ## Cómo funciona el filtro
 
 1. Convertir el fotograma a gris y aplicar **mediana 3×3** y **CLAHE** para reducir ruido y mejorar el contraste.
-2. Pasar un **Gaussiano** y usar **Sobel** para obtener la intensidad y la dirección de los bordes.
+2. Pasar un **Gaussiano** y usar **Sobel** para obtener la intensidad de los bordes.
 3. Combinar Sobel con el kernel propio para decidir cuáles cambios se consideran bordes.
-4. Reducir la imagen a una cuadrícula: cada celda guarda el brillo promedio, la cantidad de borde y la dirección del gradiente.
-5. Dibujar un carácter por celda con OpenCV. El brillo bajo se ve como un espacio; el alto, como un símbolo denso, por ejemplo # o @. Donde al menos cerca del 10 % de la celda contiene borde, usar |, -, / o \ según su orientación.
+4. Reducir la imagen a dos cuadrículas: brillo promedio y proporción de borde por celda.
+5. Dibujar una cuadrícula verde estilo terminal. El brillo determina la densidad de cada carácter. Cuando cerca del 10 % de la celda es borde, se sube un nivel en la misma escala, sin dibujar líneas adicionales.
 
 ### Kernel propio
 
@@ -28,7 +28,7 @@ El control **Celda ASCII** ajusta cuántos caracteres caben. Cada celda mide ini
 
 ### CPU, OpenCL y visualización
 
-La plantilla `Efecto<Imagen>` contiene una sola secuencia de procesamiento: se instancia con `Mat` para CPU y con `UMat` para la ruta OpenCL. `UMat` permite utilizar la GPU en las operaciones compatibles; algunas pueden ejecutarse en CPU según el soporte disponible. En la vista ASCII solo se descargan las cuatro matrices de celdas. Las dos rutas dibujan los caracteres en CPU; el benchmark incluye ese dibujo en el tiempo total, no en el tiempo de filtrado.
+La plantilla `Efecto<Imagen>` contiene una sola secuencia de procesamiento: se instancia con `Mat` para CPU y con `UMat` para la ruta OpenCL. `UMat` permite utilizar la GPU en las operaciones compatibles; algunas pueden ejecutarse en CPU según el soporte disponible. En la vista ASCII solo se descargan las dos matrices de celdas. Las dos rutas dibujan los caracteres en CPU; el benchmark incluye ese dibujo en el tiempo total, no en el tiempo de filtrado.
 
 La ventana usa `Lienzo` con `WINDOW_AUTOSIZE`, como el Ejemplo 7. Original y efecto se copian con `copyTo` a dos regiones `Rect` de un mismo `Mat`, siguiendo los Ejemplos 6 y 7. Las barras se crean con `createTrackbar` y se leen con `getTrackbarPos`, como en el Ejemplo 3.
 

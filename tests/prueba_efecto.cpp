@@ -11,13 +11,15 @@ using namespace std;
 
 // Asistencia de IA: OpenAI Codex añadió casos para símbolos, kernel y tamaños de salida.
 int main() {
-    assert(caracterAscii(0, 0, 0, 0) == ' ');
-    assert(caracterAscii(255, 0, 0, 0) == '@');
-    assert(caracterAscii(255, 24, 80, 0) == '@');
-    assert(caracterAscii(255, 25, 80, 0) == '|');
-    assert(caracterAscii(255, 25, 0, -80) == '-');
-    assert(caracterAscii(255, 25, 80, 80) == '/');
-    assert(caracterAscii(255, 25, -80, 80) == '\\');
+    assert(caracterAscii(0, 0) == ' ');
+    assert(caracterAscii(255, 255) == '@');
+    const string rampa(tonosAscii);
+    for (int luz = 0; luz <= 255; ++luz) {
+        size_t normal = rampa.find(caracterAscii(luz, 24));
+        size_t borde = rampa.find(caracterAscii(luz, 25));
+        assert(normal != string::npos && borde != string::npos);
+        assert(borde == min(normal + 1, rampa.size() - 1));
+    }
 
     Parametros p;
     Efecto<Mat> efecto;
@@ -39,7 +41,7 @@ int main() {
     Mat luz(Size(96, 72), CV_8UC3, Scalar::all(240)), brillo;
     efecto.procesar(luz, p);
     cvtColor(dibujarAscii(efecto.cuadricula(), luz.size()), brillo, COLOR_BGR2GRAY);
-    assert(countNonZero(brillo < 25) > 0 && countNonZero(brillo > 100) > 0);
+    assert(countNonZero(brillo < 35) > 0 && countNonZero(brillo > 100) > 0);
     assert(countNonZero(efecto.binaria) == 0);
 
     Mat escalon(72, 96, CV_8UC3, Scalar::all(0));
@@ -50,13 +52,14 @@ int main() {
     p.umbral = 20;
     efecto.procesar(escalon, p);
     CuadriculaAscii c = efecto.cuadricula();
-    int columnasConBorde = 0;
+    int celdasRealzadas = 0;
     for (int x = 0; x < c.luz.cols; ++x) {
         int y = c.luz.rows / 2;
-        columnasConBorde += caracterAscii(c.luz.at<uchar>(y, x), c.bordes.at<uchar>(y, x),
-                                          c.dx.at<short>(y, x), c.dy.at<short>(y, x)) == '|';
+        uchar brilloCelda = c.luz.at<uchar>(y, x);
+        celdasRealzadas += caracterAscii(brilloCelda, c.bordes.at<uchar>(y, x)) !=
+                          caracterAscii(brilloCelda, 0);
     }
-    assert(columnasConBorde > 0);
+    assert(celdasRealzadas > 0);
     p.umbral = 255;
     efecto.procesar(escalon, p);
     assert(countNonZero(efecto.cuadricula().bordes) == 0);
@@ -66,5 +69,5 @@ int main() {
     efecto.procesar(pequena, p);
     assert(efecto.cuadricula().luz.size() == Size(1, 1));
     assert(dibujarAscii(efecto.cuadricula(), pequena.size()).size() == pequena.size());
-    cout << "ASCII: brillo, direccion, kernel y dimensiones comprobados\n";
+    cout << "ASCII: brillo, densidad de borde, kernel y dimensiones comprobados\n";
 }

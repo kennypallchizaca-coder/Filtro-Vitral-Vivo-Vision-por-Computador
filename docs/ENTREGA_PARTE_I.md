@@ -7,7 +7,7 @@ La guía vigente es `Guia-Proyecto-Integrador-Visión-Artificial-G9_.pdf`, en `V
 | Requisito | Estado comprobado |
 |---|---|
 | Escritorio C++/OpenCV y Android con C++ nativo por JNI (pp. 4 y 7) | Ejecutable y APK ARM64 compilados; el núcleo `Principal.hpp` es idéntico en ambos repositorios. |
-| Cuatro filtros de clase, kernel propio justificado y modificación de píxeles (pp. 3–4 y 7) | Mediana, CLAHE, Gaussiano, Sobel y `filter2D`; se usa brillo para elegir símbolos y la máscara/gradiente para orientar los de borde. [Explicación y preguntas](DEFENSA_CODIGO.md). |
+| Cuatro filtros de clase, kernel propio justificado y modificación de píxeles (pp. 3–4 y 7) | Mediana, CLAHE, Gaussiano, Sobel y `filter2D`; se usa brillo para elegir símbolos y se aumenta un nivel al detectar borde. [Explicación y preguntas](DEFENSA_CODIGO.md). |
 | Mat/UMat con OpenCL, controles dinámicos de tamaño y peso, tiempo/RAM/recursos (pp. 3–4 y 7–8) | Se comparó con video sintético en Windows y se seleccionó la RTX 4070 con OpenCL. En Android están los controles y métricas; se comprobó el núcleo móvil en el PC, no el OpenCL del teléfono. |
 | Escritorio VTK: textura de video que se actualiza sobre una primitiva 3D (pp. 4 y 7–8) | Original y ASCII en un mismo lienzo con un plano VTK. Prueba de textura/pose/cierre y revisión visual con video sintético. No reconstruye profundidad. |
 | Móvil: original y final simultáneos, selector de intermedios (p. 8) | Prueba nativa de composición horizontal/vertical y vistas; selector y controles comprobados por código/XML. Falta revisar la interfaz renderizada, permisos, reinicio, cámaras y rotación en el S25 Ultra. |
@@ -18,7 +18,7 @@ No se ha comprobado que otro grupo no utilice la misma combinación artística. 
 
 ## Verificaciones de la revisión
 
-- **Escritorio:** CMake Release y CTest **4/4**. La prueba de CLI detectó antes de corregir que `--kernle=51` era ignorado; ahora rechaza la opción, conserva `--help`/`-h` y no abre una fuente para una invocación inválida. La prueba de benchmark elimina su propio video temporal al terminar. En Lienzo se observó la comparación ASCII, se cambió de etapa con `T`, de comparación a CPU con Espacio y la celda de 9 a 13. No se usó webcam ni se probaron otros monitores o escalas DPI.
+- **Escritorio:** CMake Release y CTest **4/4**. La CLI rechaza opciones desconocidas y conserva `--help`/`-h`. La prueba de benchmark elimina su propio video temporal. Antes del ajuste de las letras se comprobaron Lienzo, `T`, Espacio y el deslizador ASCII. Para el acabado de terminal se verificó el resultado desde una foto de prueba, sin capturar la pantalla. No se usó webcam ni se probaron otros monitores o escalas DPI.
 - **Android:** pruebas estáticas **11/11**, CTest nativo **1/1** en Windows con la RTX 4070, Gradle debug y APK de instrumentación compilados, **2/2** pruebas JVM y lint sin errores (8 advertencias). La prueba estática de reinicio falló antes de restablecer la visibilidad del mensaje de espera y pasó después. La consulta JNI de estado GPU ahora se realiza cuando la interfaz va a actualizarse, no en todos los fotogramas. No se ejecutó instrumentación ni se midieron tiempos en un teléfono.
 - **Alcance web:** no se construyó ni se probó una aplicación web. El único HTML identificado era el informe sustituido por la futura plantilla.
 
@@ -28,12 +28,12 @@ Medición del 17 de noviembre de 2026. Mismo clip sintético local, MJPG, 240 fo
 
 | Gaussiano | Modo | Filtrado medio (ms) | Proceso medio (ms) | FPS de proceso | RAM máxima (MiB) |
 |---:|---|---:|---:|---:|---:|
-| 5 | CPU | 3,04 | 3,75 | 266,80 | 89,14 |
-| 5 | OpenCL | 1,43 | 2,22 | 450,38 | 204,29 |
-| 31 | CPU | 3,57 | 4,13 | 242,22 | 88,89 |
-| 31 | OpenCL | 1,46 | 2,24 | 445,71 | 205,18 |
-| 51 | CPU | 5,01 | 5,70 | 175,31 | 88,73 |
-| 51 | OpenCL | 1,46 | 2,23 | 448,23 | 205,54 |
+| 5 | CPU | 2,00 | 2,74 | 364,55 | 89,25 |
+| 5 | OpenCL | 1,29 | 2,17 | 460,10 | 204,87 |
+| 31 | CPU | 2,70 | 3,67 | 272,34 | 88,97 |
+| 31 | OpenCL | 1,28 | 2,17 | 461,82 | 205,45 |
+| 51 | CPU | 4,16 | 5,13 | 194,91 | 89,15 |
+| 51 | OpenCL | 1,29 | 2,18 | 459,53 | 205,03 |
 
 El tiempo total incluye el dibujo ASCII en CPU; OpenCL incluye además subida y descarga. FPS de proceso es `1000 / ms medio` antes del redondeo; no es FPS real de cámara ni incluye VTK. RAM es el Working Set del proceso, no VRAM. En este clip la ruta OpenCL procesó más rápido y usó más RAM; no se extrapola al S25. Los datos en `docs/mediciones` son de la versión anterior, no se mezclan con esta tabla.
 
@@ -52,6 +52,7 @@ El informe anterior declaraba:
 | «IMPLEMETEMOS ESO Y ELIMINES EL COMIC YA QUE NO ME GUSTO» | Se sustituyó el acabado cómic por luminancia y símbolos de borde; se conservaron kernel, filtros de clase, métricas, VTK y vistas Android. Las pruebas comprueban símbolos, tamaño de salida, respuesta del kernel y navegación de resultados. |
 | «Revisa, corrige y organiza mi proyecto de Visión por Computador, incluyendo **la aplicación de escritorio, la aplicación web y la aplicación móvil**.» | Se contrastó el alcance con la guía vigente. Se añadieron regresiones para opciones desconocidas y espera al reiniciar cámara, se verificaron compilaciones y se identificó en código la asistencia comprobable. |
 | «elimanlo porque ya te voy a paasr la plantilla y ahi va hacerce el informe» | Se retiró el HTML y se conservaron la declaración, las fuentes y los resultados en este material para trasladarlos a la plantilla. No se creó una web nueva. |
+| «EL RESULTADO NO ESTA ASI» (con una muestra del retrato ASCII) | Se sustituyeron las rayas direccionales por una escala de caracteres verdes según el brillo. El kernel sigue influyendo en la densidad de celdas con borde. Se compiló y verificó en ambas plataformas y se volvió a medir el rendimiento en el PC. |
 
 Bloques identificados: núcleo ASCII `Principal.hpp` en ambos repositorios; medición del dibujo y validación de opciones en `Principal.cpp`; barras ASCII en `Interfaz.hpp`; vistas, temporización y JNI en `ProcesadorAndroid.hpp`/`native-lib.cpp`; parámetros y estado de la cámara en Kotlin. **Pendiente de confirmar con el estudiante:** prompts de etapas previas no preservados, contribución exacta por bloque antiguo y política separada publicada en el AVAC, no aportada aquí como documento local. No se atribuye automáticamente a IA el material docente ni se afirma una autoría individual solo por el historial Git.
 

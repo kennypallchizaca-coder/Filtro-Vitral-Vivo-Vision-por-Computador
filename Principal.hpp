@@ -45,45 +45,47 @@ inline cv::Mat crearKernel(double diagonal) {
 }
 
 struct CuadriculaAscii {
-    cv::Mat luz, bordes, dx, dy;
+    cv::Mat luz, bordes;
     int celda;
 };
 
-inline constexpr char tonosAscii[] = " .:-=+*#%@";
+inline constexpr char tonosAscii[] = " .,:;+=*#%@";
 
-inline char caracterAscii(uchar luz, uchar borde, int dx, int dy) {
-    // El carácter apunta a lo largo del borde, perpendicular al gradiente.
-    if (borde >= 25 && (dx != 0 || dy != 0)) {
-        if (std::abs(dx) > 2 * std::abs(dy)) return '|';
-        if (std::abs(dy) > 2 * std::abs(dx)) return '-';
-        return dx * dy > 0 ? '/' : '\\';
-    }
-    return tonosAscii[(luz * (sizeof(tonosAscii) - 2) + 127) / 255];
+inline char caracterAscii(uchar luz, uchar borde) {
+    const int ultimo = sizeof(tonosAscii) - 2;
+    double brillo = std::clamp((luz - 9) / 204.0, 0.0, 1.0);
+    // La gamma aclara los tonos medios; los bordes solo suben un nivel, sin dibujar rayas.
+    int nivel = cvRound(ultimo * std::pow(brillo, 0.77));
+    return tonosAscii[std::min(ultimo, nivel + (borde >= 25))];
 }
 
 inline cv::Mat dibujarAscii(const CuadriculaAscii& c, cv::Size tamano) {
     int ancho = c.celda, alto = c.celda * 3 / 2;
-    const cv::Scalar fondo(16, 23, 16), tinta(164, 249, 177);
-    const std::string caracteres = std::string(tonosAscii) + "|/\\";
+    const cv::Scalar fondo(25, 32, 19);
+    const std::string caracteres(tonosAscii);
     const int fuente = cv::FONT_HERSHEY_PLAIN;
-    double escala = (ancho - 1) / 13.0;
+    const int grosor = 3;
+    int base;
+    int anchoMaximo = cv::getTextSize("@", fuente, 1.0, grosor, &base).width;
+    double escala = (2.0 * ancho - 2 - grosor) / (anchoMaximo - grosor);
     std::vector<cv::Mat> letras;
-    // Una imagen por símbolo, no una llamada a putText por cada casilla.
-    for (char letra : caracteres) {
-        cv::Mat ficha(alto, ancho, CV_8UC3, fondo);
-        std::string texto(1, letra);
-        int base;
-        cv::Size medida = cv::getTextSize(texto, fuente, escala, 1, &base);
-        cv::putText(ficha, texto, cv::Point((ancho - medida.width) / 2,
-                    (alto + medida.height - base) / 2), fuente, escala, tinta, 1, cv::LINE_AA);
+    // Las fichas se dibujan al doble y se reducen para conservar el trazo en celdas pequeñas.
+    for (size_t i = 0; i < caracteres.size(); ++i) {
+        cv::Mat ficha(2 * alto, 2 * ancho, CV_8UC3, fondo);
+        std::string texto(1, caracteres[i]);
+        double nivel = double(i) / (caracteres.size() - 1);
+        cv::Scalar tinta(163 + 50 * nivel, 211 + 34 * nivel, 155 + 60 * nivel);
+        cv::Size medida = cv::getTextSize(texto, fuente, escala, grosor, &base);
+        cv::putText(ficha, texto, cv::Point((2 * ancho - medida.width) / 2,
+                    (2 * alto + medida.height - base) / 2), fuente, escala, tinta, grosor);
+        cv::resize(ficha, ficha, cv::Size(ancho, alto), 0, 0, cv::INTER_AREA);
         letras.push_back(ficha);
     }
 
     cv::Mat mosaico(c.luz.rows * alto, c.luz.cols * ancho, CV_8UC3);
     for (int y = 0; y < c.luz.rows; ++y) {
         for (int x = 0; x < c.luz.cols; ++x) {
-            char letra = caracterAscii(c.luz.at<uchar>(y, x), c.bordes.at<uchar>(y, x),
-                                       c.dx.at<short>(y, x), c.dy.at<short>(y, x));
+            char letra = caracterAscii(c.luz.at<uchar>(y, x), c.bordes.at<uchar>(y, x));
             letras[caracteres.find(letra)].copyTo(mosaico(cv::Rect(x * ancho, y * alto, ancho, alto)));
         }
     }
@@ -120,8 +122,6 @@ struct Efecto {
                        std::max(1, frame.rows / (p.celda * 3 / 2)));
         cv::resize(gris, luzCeldas, celdas, 0, 0, cv::INTER_AREA);
         cv::resize(binaria, bordeCeldas, celdas, 0, 0, cv::INTER_AREA);
-        cv::resize(gx, dxCeldas, celdas, 0, 0, cv::INTER_AREA);
-        cv::resize(gy, dyCeldas, celdas, 0, 0, cv::INTER_AREA);
     }
 
     CuadriculaAscii cuadricula() const {
@@ -130,15 +130,13 @@ struct Efecto {
         // Desde OpenCL solo se leen las celdas, no una imagen completa.
         luzCeldas.copyTo(c.luz);
         bordeCeldas.copyTo(c.bordes);
-        dxCeldas.copyTo(c.dx);
-        dyCeldas.copyTo(c.dy);
         return c;
     }
 
 private:
     cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
     cv::Mat kernelPropio;
-    Imagen gx, gy, gxpos, gypos, filtroPropio, luzCeldas, bordeCeldas, dxCeldas, dyCeldas;
+    Imagen gx, gy, gxpos, gypos, filtroPropio, luzCeldas, bordeCeldas;
     double diagonalAnterior = -1, contrasteAnterior = -1;
     int anchoCelda = 9;
 

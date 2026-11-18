@@ -1,6 +1,6 @@
 # Guía de estudio y sustentación — Parte I
 
-Esta guía describe el código actual, no una versión anterior del efecto. La salida diseñada es una imagen ASCII en color, formada con caracteres que siguen los bordes y otros que representan el brillo. El kernel propio aporta a la máscara de bordes. La aplicación móvil añade una vista «Portal ASCII».
+La salida es una imagen ASCII verde sobre fondo oscuro. Todos los caracteres representan distintos niveles de brillo; el kernel propio aporta a la máscara que realza los bordes. La aplicación móvil añade una vista «Portal ASCII».
 
 ## 1. Cómo se relacionan las aplicaciones
 
@@ -49,9 +49,9 @@ Los siete controles son: umbral 40; tamaño Gaussiano 5; sigma 1.73; peso propio
 
 ### De imágenes pequeñas a caracteres
 
-`Efecto::procesar` reduce cuatro mapas con `INTER_AREA`: brillo, máscara de bordes y `Gx/Gy` con signo. Si el fotograma mide `W×H` y el tamaño de celda es `c`, la cuadrícula es aproximadamente `max(1,W/c) × max(1,H/(c·3/2))`. El parámetro `celda` inicia en 9 y varía entre 6 y 24. INTER_AREA promedia el área que representa cada celda; no selecciona solo un píxel.
+`Efecto::procesar` reduce dos mapas con `INTER_AREA`: brillo y máscara de bordes. Si el fotograma mide `W×H` y el tamaño de celda es `c`, la cuadrícula es aproximadamente `max(1,W/c) × max(1,H/(c·3/2))`. El parámetro `celda` inicia en 9 y varía entre 6 y 24. INTER_AREA promedia el área que representa cada celda; no selecciona solo un píxel.
 
-`caracterAscii` decide el símbolo de cada celda. Si la cobertura de borde llega a 25 sobre 255 y hay gradiente, elige `|`, `-`, `/` o `\` según los valores y signos de `Gx` y `Gy`. El carácter va a lo largo del borde, perpendicular al gradiente. Si no, el brillo `L` escoge uno de diez caracteres con `i=(L·9+127)/255`; la división entera aproxima el redondeo al más cercano. `dibujarAscii` prepara fichas con `putText`, las copia en una cuadrícula y ajusta el resultado al tamaño de entrada. La ruta UMat solo descarga los cuatro mapas reducidos; el texto se dibuja en CPU.
+`caracterAscii` normaliza el brillo `L`: `b=clamp((L−9)/204,0,1)`. Elige entre once caracteres con `i=round(10·b^0.77)`. El exponente menor que uno aclara tonos medios. Si la cobertura de borde llega a 25 sobre 255, suma uno al índice sin superar el máximo. `dibujarAscii` prepara fichas con `putText` al doble de tamaño y las reduce para obtener trazos legibles. La ruta UMat solo descarga los dos mapas reducidos; el texto se dibuja en CPU.
 
 En Android la cámara entrega RGBA. `ProcesadorAndroid` convierte `RGBA→BGR` para usar el núcleo común y convierte el resultado `BGR→RGBA` para devolverlo a la cámara. En la comparación, las imágenes completas original y ASCII se encajan sin deformación, en horizontal o vertical según la orientación. Las vistas intermedias permiten inspeccionar gris, mediana, Gaussiano, gradiente, respuesta propia y máscara. «Portal ASCII» deja el video original fuera de un rectángulo central y muestra ASCII dentro; no detecta a una persona ni reconstruye AR.
 
@@ -81,8 +81,8 @@ La guía del curso permite asistencia de LLM, pero exige comprender y citar el c
 1. **¿Por qué mediana y no promedio?** La mediana reemplaza el centro por el valor central ordenado de una ventana 3×3; suele quitar ruido impulsivo sin difundir un valor extremo a todos los vecinos. Referencia: `Efecto::procesar` en `Principal.hpp`.
 2. **¿Qué significa que el kernel sume cero?** En una región uniforme la suma ponderada cancela y la salida es cero. En un borde los vecinos y el centro no son iguales y queda una respuesta. Referencia: `crearKernel` y `detectarContornos`.
 3. **¿Qué cambia al aumentar `a` o `peso propio`?** `a` cambia la contribución de las dos diagonales del kernel. El peso controla la mezcla entre la respuesta propia y el promedio de magnitudes Sobel; no cambia Sobel.
-4. **¿Sobel devuelve la dirección del borde?** Devuelve derivadas horizontales y verticales con signo. El programa usa sus magnitudes para la máscara y los valores reducidos con signo para orientar el carácter ASCII.
-5. **¿Cómo se elige un carácter?** La cobertura de bordes decide si se usa un símbolo orientado; si no hay borde suficiente, el brillo medio selecciona densidad. Referencias: `caracterAscii` y `dibujarAscii`.
+4. **¿Cómo aporta Sobel al ASCII?** Sus magnitudes horizontal y vertical se combinan con el kernel propio para crear la máscara. No se dibujan rayas según la dirección del gradiente.
+5. **¿Cómo se elige un carácter?** El brillo medio selecciona la densidad. Con suficiente borde se avanza un lugar en la misma escala, sin crear símbolos aparte. Referencias: `caracterAscii` y `dibujarAscii`.
 6. **¿Por qué el resultado GPU puede ser más lento?** OpenCL puede requerir subir y bajar datos; algunas operaciones y el dibujo ASCII siguen en CPU. Se sincroniza el trabajo, pero el beneficio depende del equipo y de la carga.
 7. **¿La vista VTK es una reconstrucción 3D?** No. Es una textura dinámica sobre un plano que se puede girar; la cámara no calcula profundidad. Referencia: `Vista3D::componer` y `actualizar`.
 8. **¿Por qué cambiar RGBA a BGR en Android?** La cámara/OpenCV entrega cuatro canales, el núcleo compartido espera tres canales BGR y la vista necesita RGBA otra vez. La salida conserva las dimensiones que espera la cámara.
