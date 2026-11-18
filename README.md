@@ -112,6 +112,7 @@ La interfaz muestra tiempos CPU y OpenCL, transferencias GPU, FPS del ciclo visi
 ## Informe y comprobaciones de Parte I
 
 - [Estado, resultados de Vitral Vivo y declaración de IA](docs/ENTREGA_PARTE_I.md).
-- [Datos históricos y metadatos del informe](docs/mediciones/metadatos.json): seis casos CPU/OpenCL, 120 muestras por caso y kernels 5, 31 y 51 sobre el mismo clip sintético. No son mediciones del teléfono ni de la cámara en vivo.
+- [Guía de sustentación y preguntas de práctica](docs/DEFENSA_CODIGO.md).
+- [Código de escritorio explicado por líneas](docs/CODIGO_ESCRITORIO.md).
 - [Guion del videoblog en inglés](docs/GUION_VIDEO_EN.md). La grabación la realizará el usuario; el guion no sustituye al video.
 - `tests/prueba_vista3d.cpp` verifica texturas dinámicas, pose, reapertura, integración en una sola ventana, posición del panel, trackbars y cierre del padre mediante renderizado real. Se habilita con `-DBUILD_TESTING=ON` al configurar CMake y se ejecuta con `ctest --test-dir build --output-on-failure -LE captura` para verificar el marco y el visor sin capturas; no es necesario para abrir la aplicación.

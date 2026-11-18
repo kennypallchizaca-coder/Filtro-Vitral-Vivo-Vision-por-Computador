@@ -6,6 +6,8 @@ Vitral Vivo convierte el video en piezas triangulares de color con uniones oscur
 
 Sigue un solo fotograma. Primero responde **qué entra**, luego **qué se calcula**, y al final **qué se muestra**. Lee `Efecto::procesar` antes de `dibujarVitral`. Cuando entiendas el núcleo, revisa quién lo llama en escritorio y en Android. Deja los detalles de renderizado y de hilos para una segunda lectura.
 
+Si tienes el editor abierto, ve al [recorrido por líneas del código](#7-recorrido-por-líneas-del-código). Los números corresponden al código fuente, no a este documento.
+
 Para explicarlo en 30 segundos: «Del fotograma saco dos cosas: su color original y un mapa que indica dónde hay detalle. El color pinta los triángulos y los bordes hacen más visibles las subdivisiones. Las posiciones de los triángulos permanecen fijas, así que el vitral no salta entre fotogramas».
 
 ## 1. Cómo se relacionan las aplicaciones
@@ -173,3 +175,13 @@ La guía del curso permite asistencia de LLM, pero exige comprender y citar el c
 4. En el S25, espera una muestra CPU y luego selecciona OpenCL sin cambiar escena, vista ni controles. Explica por qué dos filas visibles no significan dos rutas simultáneas. Si aparece respaldo CPU, di qué pasó.
 
 Si puedes explicar esos cuatro ejercicios sin leer el código línea por línea, ya tienes el recorrido para el [video en inglés](GUION_VIDEO_EN.md). Usa el [borrador del informe](ENTREGA_PARTE_I.md) para distinguir los resultados medidos de los ejemplos de aprendizaje.
+
+## 7. Recorrido por líneas del código
+
+La explicación detallada de escritorio está en [CODIGO_ESCRITORIO.md](CODIGO_ESCRITORIO.md). Sigue el código en este orden:
+
+1. [Principal.cpp](CODIGO_ESCRITORIO.md#1-principalcpp): cámara, ciclo de video, CPU/OpenCL y benchmark.
+2. [Principal.hpp](CODIGO_ESCRITORIO.md#2-principalhpp): parámetros, kernel, máscara y dibujo de triángulos.
+3. [Interfaz.hpp](CODIGO_ESCRITORIO.md#3-interfazhpp): cómo los deslizadores y el teclado cambian el estado.
+4. [Vista3D.hpp](CODIGO_ESCRITORIO.md#4-vista3dhpp): cómo se pegan las imágenes, dónde se crea el marco, cómo se integra el visor y qué hace `R`.
+5. [Mediciones](CODIGO_ESCRITORIO.md#5-medicioneshpp-y-medicionescpp) y [CMake](CODIGO_ESCRITORIO.md#6-cmakeliststxt): recursos de Windows, compilación y pruebas.

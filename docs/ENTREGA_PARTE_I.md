@@ -64,7 +64,7 @@ La guía (pp. 1–2) permite la asistencia con cita; el estudiante debe poder ex
 | OpenAI Codex: «Que cumpla la guía y que Android mida CPU y OpenCL por separado.» | Selección de una ruta en `MainActivity.kt` y ventanas independientes en `Mediciones.kt`. El respaldo CPU no se contabiliza como GPU. | Prueba JVM del reinicio de ventana y prueba nativa con GPU y sin OpenCL en Windows. Se observaron muestras funcionales en el S25; falta una comparación controlada para el informe. |
 | OpenAI Codex con subagentes: «Con la ayuda de subagetes Revisa, corrige y organiza mi proyecto de Visión por Computador». | Revisión separada de escritorio, Android y alcance web; se corrigieron las descripciones obsoletas de la medición. No se rehízo el filtro ni se creó una app web. | Compilación y pruebas de PC, comparación con la guía local y verificación del historial de las ramas, sin modificar `main`. |
 
-No se reconstruyeron prompts previos que no estén disponibles ni se atribuyó automáticamente la autoría de ejemplos de clase. La contribución exacta de bloques antiguos queda pendiente de confirmación. Las declaraciones de la versión anterior se conservan abajo.
+OpenAI Codex también asistió en la adaptación de componentes reutilizados: las mediciones y la validación de opciones en escritorio, y las vistas, la temporización y la integración JNI en Android. No se reconstruyeron prompts que no estén disponibles ni se atribuyó automáticamente la autoría de ejemplos de clase. La contribución exacta de bloques anteriores queda pendiente de confirmación.
 
 ## Bibliografía y fuentes de clase
 
@@ -73,7 +73,3 @@ No se reconstruyeron prompts previos que no estén disponibles ni se atribuyó a
 - K. Pulli et al. (2012), [Realtime Computer Vision with OpenCV](https://research.nvidia.com/publication/2012-06_realtime-computer-vision-opencv), `Communications of the ACM`.
 - S. M. Pizer et al. (1987), [Adaptive histogram equalization and its variations](https://doi.org/10.1016/S0734-189X(87)80186-X), `Computer Vision, Graphics, and Image Processing` 39(3), 355–368.
 - [OpenCV: soporte OpenCL](https://docs.opencv.org/4.x/dc/d83/group__core__opencl.html). Se contrastaron los encabezados de la versión instalada 5.0.0 para Mat, UMat, `WImage3D::setImage` y `CommandLineParser`. OpenCV Android SDK aporta `JavaCamera2View` y las bibliotecas nativas; Kotlin/AndroidX gestionan interfaz y ciclo de vida.
-
-## Anexo
-
-El [histórico ASCII](HISTORICO_ASCII.md) conserva los datos y declaraciones de la versión sustituida. No se usa como evidencia de Vitral Vivo.
