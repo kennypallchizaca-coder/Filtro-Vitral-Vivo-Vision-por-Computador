@@ -7,14 +7,20 @@
 #include <cassert>
 #include <filesystem>
 
-int ejecutar(vector<string> argumentos, string& texto) {
+// Asistencia de IA: OpenAI Codex amplió esta prueba para detectar opciones ignoradas.
+int ejecutar(vector<string> argumentos, string& texto, string* error = nullptr) {
     vector<char*> argv;
     for (string& argumento : argumentos)
         argv.push_back(argumento.data());
-    ostringstream captura;
+    ostringstream captura, errores;
     auto* anterior = cout.rdbuf(captura.rdbuf());
+    auto* anteriorError = error ? cerr.rdbuf(errores.rdbuf()) : nullptr;
     int codigo = mainAplicacion(static_cast<int>(argv.size()), argv.data());
     cout.rdbuf(anterior);
+    if (error) {
+        cerr.rdbuf(anteriorError);
+        *error = errores.str();
+    }
     texto = captura.str();
     return codigo;
 }
@@ -27,6 +33,10 @@ int main(int argc, char** argv) {
         assert(texto.find("CSV") == string::npos);
         assert(texto.find("Portal") == string::npos);
         assert(texto.find("textura VTK") != string::npos);
+        string alias, error;
+        assert(ejecutar({"vision", "-h"}, alias) == 0 && alias == texto);
+        assert(ejecutar({"vision", "--help", "--kernle=51"}, texto, &error) == 1);
+        assert(texto.empty() && error.find("kernle") != string::npos);
         cout << "Ayuda sin opciones de guardado CSV\n";
         return 0;
     }
@@ -56,5 +66,8 @@ int main(int argc, char** argv) {
                          "--mode=cpu", "--frames=3", opcion}, texto) == 1);
         assert(filesystem::is_empty(carpeta / "salidas"));
     }
-    cout << "Mediciones en consola, sin archivos; entrada temporal: " << carpeta << '\n';
+    assert(filesystem::remove(video));
+    assert(filesystem::remove(carpeta / "salidas"));
+    assert(filesystem::remove(carpeta));
+    cout << "Mediciones en consola, sin archivos; entrada temporal eliminada\n";
 }

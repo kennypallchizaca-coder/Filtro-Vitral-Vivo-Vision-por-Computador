@@ -24,24 +24,19 @@ struct EstadoInterfaz {
 inline void eventoTrack(int, void*) {
 }
 
-// Crea las barras y sus valores iniciales, siguiendo los Ejemplos 3 y 7.
+// Barras de los Ejemplos 3 y 7; OpenAI Codex adaptó los controles al ASCII.
 inline void crearControles(const string& ventana, const Parametros& p) {
     createTrackbar("Kernel", ventana, nullptr, 51, eventoTrack, nullptr);
     createTrackbar("Sigma x100", ventana, nullptr, 1000, eventoTrack, nullptr);
     createTrackbar("Umbral", ventana, nullptr, 255, eventoTrack, nullptr);
     createTrackbar("Peso propio %", ventana, nullptr, 100, eventoTrack, nullptr);
     createTrackbar("Diagonal x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Radio puntos", ventana, nullptr, 3, eventoTrack, nullptr);
-    createTrackbar("Niveles", ventana, nullptr, 16, eventoTrack, nullptr);
-    createTrackbar("Saturacion x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Brillo x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Neon x100", ventana, nullptr, 300, eventoTrack, nullptr);
-    createTrackbar("Glitch px", ventana, nullptr, 3, eventoTrack, nullptr);
+    createTrackbar("Celda ASCII", ventana, nullptr, 24, eventoTrack, nullptr);
     createTrackbar("CLAHE x100", ventana, nullptr, 800, eventoTrack, nullptr);
 
     setTrackbarMin("Kernel", ventana, 3);
     setTrackbarMin("Sigma x100", ventana, 10);
-    setTrackbarMin("Niveles", ventana, 2);
+    setTrackbarMin("Celda ASCII", ventana, 6);
     setTrackbarMin("CLAHE x100", ventana, 10);
 
     setTrackbarPos("Kernel", ventana, p.tamGauss);
@@ -49,12 +44,7 @@ inline void crearControles(const string& ventana, const Parametros& p) {
     setTrackbarPos("Umbral", ventana, p.umbral);
     setTrackbarPos("Peso propio %", ventana, cvRound(p.pesoPropio * 100));
     setTrackbarPos("Diagonal x100", ventana, cvRound(p.diagonal * 100));
-    setTrackbarPos("Radio puntos", ventana, p.radioPuntos);
-    setTrackbarPos("Niveles", ventana, p.niveles);
-    setTrackbarPos("Saturacion x100", ventana, cvRound(p.saturacion * 100));
-    setTrackbarPos("Brillo x100", ventana, cvRound(p.brillo * 100));
-    setTrackbarPos("Neon x100", ventana, cvRound(p.neon * 100));
-    setTrackbarPos("Glitch px", ventana, p.desplazamiento);
+    setTrackbarPos("Celda ASCII", ventana, p.celda);
     setTrackbarPos("CLAHE x100", ventana, cvRound(p.contraste * 100));
 }
 
@@ -72,12 +62,7 @@ inline Parametros leerControles(const string& ventana, int kernelAnterior) {
     p.umbral = getTrackbarPos("Umbral", ventana);
     p.pesoPropio = getTrackbarPos("Peso propio %", ventana) / 100.0;
     p.diagonal = getTrackbarPos("Diagonal x100", ventana) / 100.0;
-    p.radioPuntos = getTrackbarPos("Radio puntos", ventana);
-    p.niveles = getTrackbarPos("Niveles", ventana);
-    p.saturacion = getTrackbarPos("Saturacion x100", ventana) / 100.0;
-    p.brillo = getTrackbarPos("Brillo x100", ventana) / 100.0;
-    p.neon = getTrackbarPos("Neon x100", ventana) / 100.0;
-    p.desplazamiento = getTrackbarPos("Glitch px", ventana);
+    p.celda = getTrackbarPos("Celda ASCII", ventana);
     p.contraste = getTrackbarPos("CLAHE x100", ventana) / 100.0;
     return p;
 }

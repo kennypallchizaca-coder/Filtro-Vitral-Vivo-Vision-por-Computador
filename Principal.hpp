@@ -2,24 +2,22 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
+// Asistencia de IA: OpenAI Codex adaptó los filtros de clase al efecto ASCII y a Mat/UMat.
 struct Parametros {
     int umbral = 40;
     int tamGauss = 5;
     double sigma = 1.73;
     double pesoPropio = 0.3;
     double diagonal = 1.0;
-    int niveles = 8;
-    int radioPuntos = 1;
-    double saturacion = 1.25;
-    double brillo = 1.0;
-    double neon = 1.15;
-    int desplazamiento = 1;
+    int celda = 9;
     double contraste = 1.5;
 
-    // Valida los rangos y rechaza NaN antes de pasar los parámetros a OpenCV.
     void validar() const {
         if (umbral < 0 || umbral > 255)
             throw std::invalid_argument("Umbral: 0..255");
@@ -31,24 +29,14 @@ struct Parametros {
             throw std::invalid_argument("Peso del filtro propio: 0..1");
         if (!(diagonal >= 0 && diagonal <= 3))
             throw std::invalid_argument("Diagonal: 0..3");
-        if (niveles < 2 || niveles > 16)
-            throw std::invalid_argument("Niveles: 2..16");
-        if (radioPuntos < 0 || radioPuntos > 3)
-            throw std::invalid_argument("Radio: 0..3");
-        if (!(saturacion >= 0 && saturacion <= 3))
-            throw std::invalid_argument("Saturacion: 0..3");
-        if (!(brillo >= 0 && brillo <= 3))
-            throw std::invalid_argument("Brillo: 0..3");
-        if (!(neon >= 0 && neon <= 3))
-            throw std::invalid_argument("Neon: 0..3");
-        if (desplazamiento < 0 || desplazamiento > 3)
-            throw std::invalid_argument("Desplazamiento: 0..3");
+        if (celda < 6 || celda > 24)
+            throw std::invalid_argument("Celda ASCII: 6..24");
         if (!(contraste >= 0.1 && contraste <= 8))
             throw std::invalid_argument("Contraste CLAHE: 0.1..8");
     }
 };
 
-// Kernel de suma cero: resalta bordes; su simetría iguala correlación y convolución.
+// La suma cero elimina regiones uniformes y deja las transiciones de intensidad.
 inline cv::Mat crearKernel(double diagonal) {
     if (!(diagonal >= 0 && diagonal <= 3))
         throw std::invalid_argument("Diagonal: 0..3");
@@ -56,22 +44,63 @@ inline cv::Mat crearKernel(double diagonal) {
     return cv::Mat_<float>({3, 3}, {-a, -1, 0, -1, 4 + 2 * a, -1, 0, -1, -a}) / (4 + 2 * a);
 }
 
-// Compilar la misma secuencia para Mat y UMat mantiene comparables ambas rutas.
+struct CuadriculaAscii {
+    cv::Mat luz, bordes, dx, dy;
+    int celda;
+};
+
+inline constexpr char tonosAscii[] = " .:-=+*#%@";
+
+inline char caracterAscii(uchar luz, uchar borde, int dx, int dy) {
+    // El carácter apunta a lo largo del borde, perpendicular al gradiente.
+    if (borde >= 25 && (dx != 0 || dy != 0)) {
+        if (std::abs(dx) > 2 * std::abs(dy)) return '|';
+        if (std::abs(dy) > 2 * std::abs(dx)) return '-';
+        return dx * dy > 0 ? '/' : '\\';
+    }
+    return tonosAscii[(luz * (sizeof(tonosAscii) - 2) + 127) / 255];
+}
+
+inline cv::Mat dibujarAscii(const CuadriculaAscii& c, cv::Size tamano) {
+    int ancho = c.celda, alto = c.celda * 3 / 2;
+    const cv::Scalar fondo(16, 23, 16), tinta(164, 249, 177);
+    const std::string caracteres = std::string(tonosAscii) + "|/\\";
+    const int fuente = cv::FONT_HERSHEY_PLAIN;
+    double escala = (ancho - 1) / 13.0;
+    std::vector<cv::Mat> letras;
+    // Una imagen por símbolo, no una llamada a putText por cada casilla.
+    for (char letra : caracteres) {
+        cv::Mat ficha(alto, ancho, CV_8UC3, fondo);
+        std::string texto(1, letra);
+        int base;
+        cv::Size medida = cv::getTextSize(texto, fuente, escala, 1, &base);
+        cv::putText(ficha, texto, cv::Point((ancho - medida.width) / 2,
+                    (alto + medida.height - base) / 2), fuente, escala, tinta, 1, cv::LINE_AA);
+        letras.push_back(ficha);
+    }
+
+    cv::Mat mosaico(c.luz.rows * alto, c.luz.cols * ancho, CV_8UC3);
+    for (int y = 0; y < c.luz.rows; ++y) {
+        for (int x = 0; x < c.luz.cols; ++x) {
+            char letra = caracterAscii(c.luz.at<uchar>(y, x), c.bordes.at<uchar>(y, x),
+                                       c.dx.at<short>(y, x), c.dy.at<short>(y, x));
+            letras[caracteres.find(letra)].copyTo(mosaico(cv::Rect(x * ancho, y * alto, ancho, alto)));
+        }
+    }
+    if (mosaico.size() != tamano)
+        cv::resize(mosaico, mosaico, tamano, 0, 0, cv::INTER_NEAREST);
+    return mosaico;
+}
+
+// Mat y UMat conservan los mismos filtros y la misma cuadrícula de salida.
 template <class Imagen>
 struct Efecto {
-    Imagen comic, mediana, tabla, gris, imgGauss, gx, gy, gxpos, gypos, gradiente;
-    Imagen binaria, hsv, lab;
-    std::vector<Imagen> canales = std::vector<Imagen>(3);
-    std::vector<Imagen> canalesGlich = std::vector<Imagen>(3);
-    std::vector<Imagen> canalesLab = std::vector<Imagen>(3);
-    Imagen filtroPropio, filtroPropioAbs;
-    cv::Mat kernelPropio, moverazul, moverRojo;
+    Imagen gris, mediana, imgGauss, gradiente, filtroPropioAbs, binaria;
 
-    // Compone Spiderman con los filtros de clase, el kernel propio, color y texturas.
-    // Calcula los contornos antes de la trama para no detectar sus puntos como bordes.
-    const Imagen& procesar(const Imagen& frame, const Parametros& p) {
+    void procesar(const Imagen& frame, const Parametros& p) {
         p.validar();
-        validarColor(frame);
+        if (frame.empty() || frame.type() != CV_8UC3)
+            throw std::invalid_argument("Se requiere una imagen BGR 8UC3 no vacia");
         if (p.diagonal != diagonalAnterior) {
             kernelPropio = crearKernel(p.diagonal);
             diagonalAnterior = p.diagonal;
@@ -80,202 +109,52 @@ struct Efecto {
             clahe->setClipLimit(p.contraste);
             contrasteAnterior = p.contraste;
         }
-        if (p.niveles != nivelesAnteriores) {
-            cv::Mat tablaCPU(1, 256, CV_8UC1);
-            for (int i = 0; i < 256; ++i)
-                tablaCPU.ptr<uchar>()[i] = cv::saturate_cast<uchar>(
-                    cvRound(i * (p.niveles - 1) / 255.0) * 255.0 / (p.niveles - 1));
-            tablaCPU.copyTo(tabla);
-            nivelesAnteriores = p.niveles;
-        }
 
-        cv::cvtColor(frame, lab, cv::COLOR_BGR2Lab);
-        cv::split(lab, canalesLab);
-        clahe->apply(canalesLab[0], canalesLab[0]);
-        cv::merge(canalesLab, lab);
-        cv::cvtColor(lab, comic, cv::COLOR_Lab2BGR);
-        cv::medianBlur(comic, mediana, 3);
-        cv::cvtColor(mediana, gris, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(frame, gris, cv::COLOR_BGR2GRAY);
+        cv::medianBlur(gris, mediana, 3);
+        clahe->apply(mediana, gris);
         detectarContornos(p);
 
-        cv::LUT(mediana, tabla, comic);
-        aplicarPaleta(gris, comic);
-        aplicarTrama(gris, comic, p.radioPuntos);
-        aplicarRayado(gris, comic);
-        comic.setTo(cv::Scalar::all(0), binaria);
-        aplicarNeon(comic, p);
-        aplicarGlitch(comic, p.desplazamiento, binaria);
-        return comic;
+        anchoCelda = p.celda;
+        cv::Size celdas(std::max(1, frame.cols / p.celda),
+                       std::max(1, frame.rows / (p.celda * 3 / 2)));
+        cv::resize(gris, luzCeldas, celdas, 0, 0, cv::INTER_AREA);
+        cv::resize(binaria, bordeCeldas, celdas, 0, 0, cv::INTER_AREA);
+        cv::resize(gx, dxCeldas, celdas, 0, 0, cv::INTER_AREA);
+        cv::resize(gy, dyCeldas, celdas, 0, 0, cv::INTER_AREA);
     }
 
-    // Tiñe sombras y luces sin levantar los negros profundos.
-    void aplicarPaleta(const Imagen& gris, Imagen& comic) {
-        validarColor(comic);
-        if (gris.empty() || gris.type() != CV_8UC1 || gris.size() != comic.size())
-            throw std::invalid_argument("La paleta requiere gris 8UC1 del mismo tamano que BGR");
-
-        tono.create(comic.size(), CV_8UC3);
-        cv::inRange(gris, cv::Scalar(25), cv::Scalar(120), mascaraTono);
-        tono.setTo(cv::Scalar(150, 55, 95));
-        cv::addWeighted(comic, 0.75, tono, 0.25, 0, mezcla);
-        mezcla.copyTo(comic, mascaraTono);
-
-        cv::inRange(gris, cv::Scalar(175), cv::Scalar(245), mascaraTono);
-        tono.setTo(cv::Scalar(90, 195, 245));
-        cv::addWeighted(comic, 0.90, tono, 0.10, 0, mezcla);
-        mezcla.copyTo(comic, mascaraTono);
+    CuadriculaAscii cuadricula() const {
+        CuadriculaAscii c;
+        c.celda = anchoCelda;
+        // Desde OpenCL solo se leen las celdas, no una imagen completa.
+        luzCeldas.copyTo(c.luz);
+        bordeCeldas.copyTo(c.bordes);
+        dxCeldas.copyTo(c.dx);
+        dyCeldas.copyTo(c.dy);
+        return c;
     }
 
-    // Aplica puntos suaves a tonos medios; su radio crece al bajar el brillo.
-    void aplicarTrama(const Imagen& gris, Imagen& comic, int radioMaximo) {
-        validarColor(comic);
-        if (gris.empty() || gris.type() != CV_8UC1 || gris.size() != comic.size())
-            throw std::invalid_argument("La trama requiere gris 8UC1 del mismo tamano que BGR");
-        if (radioMaximo < 0 || radioMaximo > 3)
-            throw std::invalid_argument("Radio: 0..3");
-        if (radioMaximo == 0)
-            return;
-
-        if (tamanoTrama != gris.size() || radioAnterior != radioMaximo) {
-            // R+1 deja fuera de la máscara los píxeles que ningún círculo puede cubrir.
-            cv::Mat baldosa(8, 8, CV_8UC1, cv::Scalar(radioMaximo + 1)), mosaico;
-            for (int radio = radioMaximo; radio > 0; --radio)
-                cv::circle(baldosa, cv::Point(4, 4), radio, cv::Scalar(radio), cv::FILLED);
-            cv::repeat(baldosa, (gris.rows + 7) / 8, (gris.cols + 7) / 8, mosaico);
-            mosaico(cv::Rect(0, 0, gris.cols, gris.rows)).copyTo(radioMinimo);
-            tamanoTrama = gris.size();
-            radioAnterior = radioMaximo;
-        }
-
-        cv::Size celdas((gris.cols + 7) / 8, (gris.rows + 7) / 8);
-        // Un centro fuera de la imagen recibe brillo 255 y por eso genera radio cero.
-        cv::warpAffine(gris, brilloCeldas, muestreo, celdas,
-                       cv::INTER_NEAREST | cv::WARP_INVERSE_MAP, cv::BORDER_CONSTANT,
-                       cv::Scalar(255));
-        cv::resize(brilloCeldas, brilloExpandido, cv::Size(celdas.width * 8, celdas.height * 8), 0,
-                   0, cv::INTER_NEAREST);
-        brilloExpandido(cv::Rect(0, 0, gris.cols, gris.rows))
-            .convertTo(radioCelda, CV_8U, -radioMaximo / 255.0, radioMaximo);
-        cv::compare(radioCelda, radioMinimo, puntos, cv::CMP_GE);
-        cv::inRange(gris, cv::Scalar(70), cv::Scalar(155), mascaraTrama);
-        cv::bitwise_and(puntos, mascaraTrama, puntos);
-        comic.convertTo(mezcla, -1, 0.80);
-        mezcla.copyTo(comic, puntos);
-    }
-
-    // Añade líneas diagonales a las sombras y conserva el negro profundo.
-    void aplicarRayado(const Imagen& gris, Imagen& comic) {
-        validarColor(comic);
-        if (gris.empty() || gris.type() != CV_8UC1 || gris.size() != comic.size())
-            throw std::invalid_argument("El rayado requiere gris 8UC1 del mismo tamano que BGR");
-        if (tamanoRayado != gris.size()) {
-            cv::Mat baldosa = cv::Mat::zeros(8, 8, CV_8UC1), mosaico;
-            cv::line(baldosa, cv::Point(0, 0), cv::Point(7, 7), cv::Scalar(255), 1);
-            cv::repeat(baldosa, (gris.rows + 7) / 8, (gris.cols + 7) / 8, mosaico);
-            mosaico(cv::Rect(0, 0, gris.cols, gris.rows)).copyTo(rayado);
-            tamanoRayado = gris.size();
-        }
-        cv::inRange(gris, cv::Scalar(25), cv::Scalar(69), mascaraRayado);
-        cv::bitwise_and(rayado, mascaraRayado, mascaraRayado);
-        comic.convertTo(mezcla, -1, 0.70);
-        mezcla.copyTo(comic, mascaraRayado);
-    }
-
-    // Ajusta saturación y brillo en HSV, reforzando azules, morados y rosas.
-    void aplicarNeon(Imagen& comic, const Parametros& p) {
-        p.validar();
-        validarColor(comic);
-        actualizarLUT(tablaSaturacion, p.saturacion, saturacionAnterior);
-        actualizarLUT(tablaBrillo, p.brillo, brilloAnterior);
-        actualizarLUT(tablaNeon, p.neon, neonAnterior);
-
-        cv::cvtColor(comic, hsv, cv::COLOR_BGR2HSV);
-        cv::inRange(hsv, cv::Scalar(90, 51, 0), cv::Scalar(170, 255, 255), mascaraNeon);
-        cv::split(hsv, canales);
-        cv::LUT(canales[2], tablaNeon, valorNeon);
-        valorNeon.copyTo(canales[2], mascaraNeon);
-        cv::LUT(canales[1], tablaSaturacion, canales[1]);
-        // Las dos LUT de V mantienen el redondeo y recorte de cada ajuste por separado.
-        cv::LUT(canales[2], tablaBrillo, canales[2]);
-        cv::merge(canales, hsv);
-        cv::cvtColor(hsv, comic, cv::COLOR_HSV2BGR);
-    }
-
-    // Desplaza azul y rojo solo cerca de los contornos; conserva el resto de la imagen.
-    void aplicarGlitch(Imagen& comic, int desplazamiento, const Imagen& contornos) {
-        validarColor(comic);
-        if (contornos.empty() || contornos.type() != CV_8UC1 || contornos.size() != comic.size())
-            throw std::invalid_argument(
-                "Glitch requiere una mascara de contornos del mismo tamano");
-        if (desplazamiento < 0 || desplazamiento > 3)
-            throw std::invalid_argument("Desplazamiento: 0..3");
-        if (desplazamiento == 0)
-            return;
-        if (desplazamiento != desplazamientoAnterior) {
-            moverazul = cv::Mat_<double>({2, 3}, {1, 0, double(desplazamiento), 0, 1, 0});
-            moverRojo = cv::Mat_<double>({2, 3}, {1, 0, -double(desplazamiento), 0, 1, 0});
-            desplazamientoAnterior = desplazamiento;
-        }
-        cv::split(comic, canales);
-        cv::copyMakeBorder(canales[0], azulExtendido, 0, 0, desplazamiento, desplazamiento,
-                           cv::BORDER_REPLICATE);
-        cv::copyMakeBorder(canales[2], rojoExtendido, 0, 0, desplazamiento, desplazamiento,
-                           cv::BORDER_REPLICATE);
-        // BORDER_CONSTANT permite la ruta OpenCL; el margen replicado conserva los bordes.
-        cv::warpAffine(azulExtendido, azulMovido, moverazul, azulExtendido.size(),
-                       cv::INTER_NEAREST, cv::BORDER_CONSTANT);
-        cv::warpAffine(rojoExtendido, rojoMovido, moverRojo, rojoExtendido.size(),
-                       cv::INTER_NEAREST, cv::BORDER_CONSTANT);
-        cv::Rect centro(desplazamiento, 0, comic.cols, comic.rows);
-        azulMovido(centro).copyTo(canalesGlich[0]);
-        canales[1].copyTo(canalesGlich[1]);
-        rojoMovido(centro).copyTo(canalesGlich[2]);
-        cv::merge(canalesGlich, mezcla);
-        cv::dilate(contornos, mascaraGlitch, cv::Mat(), cv::Point(-1, -1), desplazamiento);
-        mezcla.copyTo(comic, mascaraGlitch);
-    }
-
-   private:
-    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
-    cv::Mat muestreo = cv::Mat_<double>({2, 3}, {8, 0, 4, 0, 8, 4});
-    Imagen radioMinimo, brilloCeldas, brilloExpandido, radioCelda, puntos;
-    Imagen tono, mezcla, mascaraTono, mascaraTrama, rayado, mascaraRayado;
-    Imagen tablaSaturacion, tablaBrillo, tablaNeon, mascaraNeon, valorNeon;
-    Imagen azulExtendido, rojoExtendido, azulMovido, rojoMovido, mascaraGlitch;
-    cv::Size tamanoTrama, tamanoRayado;
-    int nivelesAnteriores = -1, radioAnterior = -1, desplazamientoAnterior = -1;
+private:
+    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
+    cv::Mat kernelPropio;
+    Imagen gx, gy, gxpos, gypos, filtroPropio, luzCeldas, bordeCeldas, dxCeldas, dyCeldas;
     double diagonalAnterior = -1, contrasteAnterior = -1;
-    double saturacionAnterior = -1, brilloAnterior = -1, neonAnterior = -1;
+    int anchoCelda = 9;
 
-    // Adapta Gaussiano y Sobel del Ejemplo 6, Unidad 2, para construir la máscara de tinta.
+    // Gaussiano y Sobel siguen el Ejemplo 6 de la Unidad 2; el kernel pesa en la máscara.
     void detectarContornos(const Parametros& p) {
         cv::GaussianBlur(gris, imgGauss, cv::Size(p.tamGauss, p.tamGauss), p.sigma, p.sigma);
-        cv::Sobel(imgGauss, gx, CV_16S, 1, 0, 3, 1, 0);
-        cv::Sobel(imgGauss, gy, CV_16S, 0, 1, 3, 1, 0);
+        cv::Sobel(imgGauss, gx, CV_16S, 1, 0);
+        cv::Sobel(imgGauss, gy, CV_16S, 0, 1);
         cv::convertScaleAbs(gx, gxpos);
         cv::convertScaleAbs(gy, gypos);
         cv::addWeighted(gxpos, 0.5, gypos, 0.5, 0, gradiente);
 
-        // El kernel propio conserva signos y decimales hasta obtener su magnitud.
         cv::filter2D(imgGauss, filtroPropio, CV_32F, kernelPropio);
         cv::convertScaleAbs(filtroPropio, filtroPropioAbs);
         cv::addWeighted(gradiente, 1 - p.pesoPropio, filtroPropioAbs, p.pesoPropio, 0, gradiente);
         cv::threshold(gradiente, binaria, p.umbral, 255, cv::THRESH_BINARY);
         cv::medianBlur(binaria, binaria, 3);
-    }
-
-    static void validarColor(const Imagen& imagen) {
-        if (imagen.empty() || imagen.type() != CV_8UC3)
-            throw std::invalid_argument("Se requiere una imagen BGR 8UC3 no vacia");
-    }
-
-    void actualizarLUT(Imagen& destino, double factor, double& anterior) {
-        if (factor == anterior)
-            return;
-        cv::Mat tablaCPU(1, 256, CV_8UC1);
-        for (int i = 0; i < 256; ++i)
-            tablaCPU.ptr<uchar>()[i] = cv::saturate_cast<uchar>(i * factor);
-        tablaCPU.copyTo(destino);
-        anterior = factor;
     }
 };

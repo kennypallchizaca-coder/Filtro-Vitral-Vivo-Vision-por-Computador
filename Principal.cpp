@@ -48,9 +48,9 @@ bool prepararOpenCL(const string& seleccion, string& dispositivo) {
 
 struct Tiempos {
     // -1 identifica una ruta no ejecutada, en vez de presentarla como cero milisegundos.
-    double cpu = -1, gpu = -1, subida = 0, bajada = 0;
+    double cpu = -1, gpu = -1, subida = 0, bajada = 0, dibujo = 0;
     double procesoGPU() const {
-        return subida + gpu + bajada;
+        return subida + gpu + bajada + dibujo;
     }
 };
 
@@ -63,13 +63,12 @@ const Imagen& escogerEtapa(const Efecto<Imagen>& efecto, int etapa) {
             return efecto.imgGauss;
         case 3:
             return efecto.filtroPropioAbs;
-        case 4:
-            return efecto.binaria;
         default:
-            return efecto.comic;
+            return efecto.binaria;
     }
 }
 
+// Asistencia de IA: OpenAI Codex separó filtrado, transferencia y dibujo ASCII para medirlos.
 Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa, Efecto<Mat>& cpu,
                       Efecto<UMat>& gpu, UMat& frameGPU, Mat& resultado) {
     Tiempos tiempos;
@@ -78,8 +77,15 @@ Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa
         auto inicio = Reloj::now();
         cpu.procesar(frame, p);
         tiempos.cpu = milisegundos(inicio);
-        if (modo == 0)
-            resultado = escogerEtapa(cpu, etapa);
+        if (modo == 0) {
+            if (etapa == 0) {
+                inicio = Reloj::now();
+                resultado = dibujarAscii(cpu.cuadricula(), frame.size());
+                tiempos.dibujo = milisegundos(inicio);
+            } else {
+                resultado = escogerEtapa(cpu, etapa);
+            }
+        }
     }
     if (modo != 0) {
         ocl::setUseOpenCL(true);
@@ -97,9 +103,18 @@ Tiempos procesarFrame(const Mat& frame, const Parametros& p, int modo, int etapa
         ocl::finish();
         tiempos.gpu = milisegundos(inicio);
         inicio = Reloj::now();
-        escogerEtapa(gpu, etapa).copyTo(resultado);
+        CuadriculaAscii cuadricula;
+        if (etapa == 0)
+            cuadricula = gpu.cuadricula();
+        else
+            escogerEtapa(gpu, etapa).copyTo(resultado);
         ocl::finish();
         tiempos.bajada = milisegundos(inicio);
+        if (etapa == 0) {
+            inicio = Reloj::now();
+            resultado = dibujarAscii(cuadricula, frame.size());
+            tiempos.dibujo = milisegundos(inicio);
+        }
     }
     return tiempos;
 }
@@ -162,7 +177,7 @@ int benchmark(VideoCapture& video, int cantidad, Size tamano, int modo, const Pa
         Tiempos t = procesarFrame(frame, p, modo, 0, cpu, gpu, frameGPU, resultado);
         MuestraRecursos muestra = recursos.leer();
         filtros.push_back(modo == 0 ? t.cpu : t.gpu);
-        totales.push_back(modo == 0 ? t.cpu : t.procesoGPU());
+        totales.push_back(modo == 0 ? t.cpu + t.dibujo : t.procesoGPU());
         ramMaxima = max(ramMaxima, muestra.ramMiB);
     }
     double media = accumulate(filtros.begin(), filtros.end(), 0.0) / filtros.size();
@@ -181,11 +196,11 @@ int benchmark(VideoCapture& video, int cantidad, Size tamano, int modo, const Pa
 static void dibujarCabecera(Mat& lienzo, const EstadoInterfaz& estado, const Tiempos& t,
                            const MuestraRecursos& muestra, double fps) {
     static const array<string, 5> etapas = {
-        "Spiderman", "Gris CLAHE + mediana", "Gaussiano", "Kernel propio",
+        "ASCII", "Gris CLAHE + mediana", "Gaussiano", "Kernel propio",
         "Mascara de contornos"};
     static const array<string, 3> modos = {"CPU Mat", "OpenCL UMat", "Comparar CPU / OpenCL"};
     const Scalar texto(25, 25, 25);
-    string tiempos = "CPU: " + (t.cpu < 0 ? string("--") : numero(t.cpu)) +
+    string tiempos = "CPU filtro: " + (t.cpu < 0 ? string("--") : numero(t.cpu)) +
                      " ms | OpenCL: " + (t.gpu < 0 ? string("--") : numero(t.gpu)) +
                      " ms | FPS: " + numero(fps, 1);
     string transferencias = "Subida: " + (t.gpu < 0 ? string("--") : numero(t.subida)) +
@@ -296,16 +311,6 @@ int visualizar(VideoCapture& video, const string& fuente, Size tamano, EstadoInt
 
 int main(int argc, char** argv) {
     try {
-        // CommandLineParser omite las opciones desconocidas; estas ya no deben abrir la cámara.
-        for (int i = 1; i < argc; ++i) {
-            string opcion = argv[i];
-            if (opcion.empty() || opcion.front() != '-')
-                continue;
-            opcion = opcion.substr(opcion.compare(0, 2, "--") == 0 ? 2 : 1);
-            opcion = opcion.substr(0, opcion.find('='));
-            if (opcion == "capture" || opcion == "smoke" || opcion == "output")
-                throw runtime_error("Opcion retirada: " + opcion + ". Consulta --help.");
-        }
         const string claves =
             "{help h||Ayuda}{benchmark||Medir sin ventanas}"
             "{source|0|Camara numerica o archivo}{mode|both|cpu, gpu o both}"
@@ -314,6 +319,26 @@ int main(int argc, char** argv) {
             "{kernel|5|Tamano impar Gaussiano, 3 a 51}{sigma|1.73|Sigma Gaussiano}"
             "{own-weight|0.3|Peso filtro propio, 0 a 1}{diagonal|1|Peso diagonal, 0 a 3}";
         CommandLineParser argumentos(argc, argv, claves);
+        // Asistencia de IA: OpenAI Codex añadió esta validación para no ignorar errores de escritura.
+        for (int i = 1; i < argc; ++i) {
+            string opcion = argv[i];
+            if (opcion.empty() || opcion.front() != '-')
+                continue;
+            opcion = opcion.substr(opcion.compare(0, 2, "--") == 0 ? 2 : 1);
+            opcion = opcion.substr(0, opcion.find('='));
+            if (opcion.empty())
+                continue;
+            if (opcion == "capture" || opcion == "smoke" || opcion == "output")
+                throw runtime_error("Opcion retirada: " + opcion + ". Consulta --help.");
+            // has consulta las claves declaradas, incluso las que tienen un valor por defecto.
+            try {
+                argumentos.has(opcion);
+            } catch (const cv::Exception& error) {
+                if (error.code != Error::StsBadArg)
+                    throw;
+                throw runtime_error("Opcion no reconocida: " + opcion + ". Consulta --help.");
+            }
+        }
         if (argumentos.has("help")) {
             argumentos.printMessage();
             cout << "Controles: sliders=parametros, Espacio=modo, T=etapa, R=restaurar vista 3D, "

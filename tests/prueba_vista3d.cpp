@@ -90,6 +90,8 @@ int main() {
         assert(colorCentro(vista, 0.98)[1] > 200);
         setTrackbarPos("Kernel", "Panel prueba", 7);
         assert(getTrackbarPos("Kernel", "Panel prueba") == 7);
+        setTrackbarPos("Celda ASCII", "Panel prueba", 16);
+        assert(leerControles("Panel prueba", 7).celda == 16);
         EstadoInterfaz estado;
         for (int etapa = 1; etapa <= 4; ++etapa) {
             eventoTeclado('T', estado);
