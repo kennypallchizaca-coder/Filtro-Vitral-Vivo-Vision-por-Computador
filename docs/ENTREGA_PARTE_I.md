@@ -2,12 +2,13 @@
 
 Vitral Vivo reemplaza el ASCII por una malla estable de triángulos de color y uniones oscuras. Sobel y el kernel propio, calibrado antes de la mezcla, realzan subdivisiones sin mover sus vértices. Se conservan mediana, CLAHE, Gaussiano, los controles dinámicos, la textura VTK y la comparación original/efecto con vistas intermedias en Android. Ambos repositorios contienen el mismo `Principal.hpp`.
 
-## Evidencia vigente (PC, 17 de noviembre de 2026)
+## Requisitos y verificación de la Parte I (18 de noviembre de 2026)
 
-- Escritorio Release: 3/3 pruebas sin ventana. Se compiló la prueba VTK pero no se ejecutó porque obtiene una captura del visor. Falta repetir la demostración VTK y el uso de GPU en vivo sin capturas.
+- **Escritorio:** Release y 3/3 pruebas sin ventana. Se comprobó en VTK la actualización de textura, la conservación de la pose, las barras, el ciclo de vistas y el cierre, con una sonda que omitió la lectura de píxeles. No se ejecutó la prueba original que llama a `getScreenshot`. En un fotograma sintético de 640×480, CPU y OpenCL activo en la RTX 4070 tuvieron diferencias máximas por canal de 0, 4 y 4 sobre 255 para los kernels gaussianos 5, 31 y 51. Falta la demostración con cámara y carga GPU en vivo.
 - Android: APK ARM64 y APK de instrumentación compilados offline, 3/3 pruebas JVM, 11/11 comprobaciones estáticas y de empaquetado, 1/1 prueba nativa en Windows con OpenCL y prueba adicional de respaldo CPU. Lint: 0 errores, 8 advertencias. No se ejecutó instrumentación en el teléfono.
 - En Android, CPU/Mat y GPU/OpenCL tienen ventanas separadas; la pantalla conserva la última muestra completa de cada ruta y no cuenta el respaldo como OpenCL. Falta probar cámara, disponibilidad efectiva de OpenCL y rendimiento de Vitral Vivo en el S25 Ultra.
-- Asistencia: OpenAI Codex implementó la malla y el ajuste del kernel, integró las ventanas de medición y añadió pruebas de estabilidad y rutas separadas. Petición: «Sí, cambia el ASCII por el vitral de triángulos con malla estable en los dos proyectos.» Falta contrastar la política complementaria del AVAC.
+- **Web:** no hay una aplicación web en los repositorios suministrados. La guía p. 1 pide un informe en Web 2.0 o similar; la Parte I (pp. 3–8) exige escritorio y Android. Falta trasladar estos resultados, un esquema, gráficas y conclusiones a la plantilla académica.
+- **Sustentación:** [guía y ocho preguntas](DEFENSA_CODIGO.md) y [guion en inglés](GUION_VIDEO_EN.md). El videoblog no está grabado. No se ha comprobado si otro grupo usa la misma combinación artística.
 
 ## Benchmark del vitral en escritorio
 
@@ -24,13 +25,25 @@ Mismo clip sintético MJPG de 180 fotogramas, 640×480, SHA-256 `5A79D866C2AFD44
 
 El total incluye dibujo del vitral en CPU y, en OpenCL, transferencias. Los FPS son de procesamiento, no de cámara ni de la ventana con VTK; la RAM es el Working Set del proceso, no VRAM. Para repetir la comparación con un clip fijo, usa `--benchmark --source=ruta.avi --frames=120 --kernel=5 --mode=cpu`; cambia el modo a `gpu` y repite con kernels 31 y 51.
 
+## Herramientas y Asistencia de IA
+
+La guía (pp. 1–2) permite la asistencia con cita; el estudiante debe poder explicar el código y su matemática. La rúbrica de Parte I (p. 8) no enumera esta tabla de prompts como un apartado obligatorio. Se incluye por transparencia y a petición del estudiante. La política complementaria del AVAC y la plantilla todavía no se han proporcionado.
+
+| Herramienta y fragmento literal | Adaptación realizada | Verificación |
+|---|---|---|
+| OpenAI Codex: «Sí, cambia el ASCII por el vitral de triángulos con malla estable en los dos proyectos.» | Malla determinista, muestreo de color, uniones oscuras y detalle en bordes en `Principal.hpp`. Calibración del kernel propio antes de su mezcla con Sobel. | Se verificó que ambos `Principal.hpp` son idénticos; pruebas del color, estabilidad de la malla y detección a peso alto. Prueba de paridad con OpenCL activo en el PC. |
+| OpenAI Codex: «Que cumpla la guía y que Android mida CPU y OpenCL por separado.» | Selección de una ruta en `MainActivity.kt` y ventanas independientes en `Mediciones.kt`. El respaldo CPU no se contabiliza como GPU. | Prueba JVM del reinicio de ventana y prueba nativa con GPU y sin OpenCL en Windows. Todavía no hay mediciones de Vitral Vivo en el teléfono. |
+| OpenAI Codex con subagentes: «Con la ayuda de subagetes Revisa, corrige y organiza mi proyecto de Visión por Computador». | Revisión separada de escritorio, Android y alcance web; se corrigieron las descripciones obsoletas de la medición. No se rehízo el filtro ni se creó una app web. | Compilación y pruebas de PC, comparación con la guía local y verificación del historial de las ramas, sin modificar `main`. |
+
+No se reconstruyeron prompts previos que no estén disponibles ni se atribuyó automáticamente la autoría de ejemplos de clase. La contribución exacta de bloques antiguos queda pendiente de confirmación. Las declaraciones de la versión anterior se conservan abajo.
+
 ## Registro histórico: versión ASCII sustituida
 
 Las cifras, pruebas y prompts que siguen corresponden al filtro anterior. Se conservan para trazabilidad y no se deben presentar como evidencia de Vitral Vivo.
 
 La guía vigente es `Guia-Proyecto-Integrador-Visión-Artificial-G9_.pdf`, en `Vision-Computador/Proyectos/Proyecto-Integrador-G9`. Las páginas 3–8 contienen el alcance y la rúbrica del interciclo. El ejemplo tipo Sketch no obliga a copiar un estilo. El efecto elegido para esta entrega es ASCII.
 
-## Requisitos y estado
+### Requisitos y estado en la revisión ASCII
 
 | Requisito | Estado comprobado |
 |---|---|
@@ -44,13 +57,13 @@ La guía vigente es `Guia-Proyecto-Integrador-Visión-Artificial-G9_.pdf`, en `V
 
 No se ha comprobado que otro grupo no utilice la misma combinación artística. Durante la demostración, mostrar el peso propio y tamaño del Gaussiano con la misma fuente en ambos modos. La actividad GPU del proceso visible en el panel incluye VTK y no mide por separado la utilización de un kernel OpenCL.
 
-## Verificaciones de la revisión
+### Verificaciones de la revisión ASCII
 
 - **Escritorio:** CMake Release y CTest **4/4**. La CLI rechaza opciones desconocidas y conserva `--help`/`-h`. La prueba de benchmark elimina su propio video temporal. Antes del ajuste de las letras se comprobaron Lienzo, `T`, Espacio y el deslizador ASCII. Para el acabado de terminal se verificó el resultado desde una foto de prueba, sin capturar la pantalla. No se usó webcam ni se probaron otros monitores o escalas DPI.
 - **Android:** pruebas estáticas **11/11**, CTest nativo **1/1** en Windows con la RTX 4070, Gradle debug y APK de instrumentación compilados, **2/2** pruebas JVM y lint sin errores (8 advertencias). La prueba estática de reinicio falló antes de restablecer la visibilidad del mensaje de espera y pasó después. La consulta JNI de estado GPU ahora se realiza cuando la interfaz va a actualizarse, no en todos los fotogramas. No se ejecutó instrumentación ni se midieron tiempos en un teléfono.
 - **Alcance web:** no se construyó ni se probó una aplicación web. El único HTML identificado era el informe sustituido por la futura plantilla.
 
-## Datos de escritorio para las gráficas
+### Datos históricos de escritorio
 
 Medición del 17 de noviembre de 2026. Mismo clip sintético local, MJPG, 240 fotogramas, 640×480; SHA-256 `D280B824B383003DA2398498782E921DC80B7D6FC27D8F624AF3D74FB90DC118`. OpenCV 5.0.0, CPU AMD Ryzen 9 7845HX, NVIDIA GeForce RTX 4070 Laptop GPU con controlador 617.42. Cada fila corresponde a un proceso separado, con calentamiento y 120 muestras; valores restantes predeterminados. No se exportó CSV.
 
@@ -67,7 +80,7 @@ El tiempo total incluye el dibujo ASCII en CPU; OpenCL incluye además subida y 
 
 Para reproducir, usar `--benchmark --source=ruta-del-video.avi --frames=120 --kernel=5 --mode=cpu`, repetir con `--mode=gpu` y cambiar el tamaño de 5 a 31 y 51. En las gráficas usar el tamaño horizontal y series separadas CPU/OpenCL para FPS de proceso y RAM máxima.
 
-## Herramientas y Asistencia de IA
+### Asistencia de IA en la versión ASCII
 
 El informe anterior declaraba:
 

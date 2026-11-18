@@ -22,6 +22,8 @@ No hay una aplicación web separada en el alcance actual. El informe se preparar
 
 ## 2. Recorrido matemático de un fotograma
 
+`Video BGR → gris → mediana → CLAHE → Gaussiano → Sobel + kernel propio → máscara de bordes`. El BGR original y la máscara se reducen por área; el vitral toma los colores del primero y el detalle de la segunda. Escritorio aplica el resultado a la textura VTK y Android lo devuelve como RGBA.
+
 En ambos sistemas el núcleo recibe una imagen BGR. `Efecto::procesar` aplica estos pasos en orden:
 
 1. `cvtColor` calcula una luminancia aproximada: `Y ≈ 0.114 B + 0.587 G + 0.299 R`. La conversión no significa que los tres canales tengan el mismo peso.
