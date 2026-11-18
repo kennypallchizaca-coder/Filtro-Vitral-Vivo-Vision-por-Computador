@@ -1,100 +1,92 @@
-# Explicación del código de escritorio
+# Guía de estudio y sustentación — Parte I
 
-## Archivos y responsabilidades
+Esta guía describe el código actual, no una versión anterior del efecto. La salida diseñada es una imagen ASCII en color, formada con caracteres que siguen los bordes y otros que representan el brillo. El kernel propio aporta a la máscara de bordes. La aplicación móvil añade una vista «Portal ASCII».
 
-| Archivo | Responsabilidad |
+## 1. Cómo se relacionan las aplicaciones
+
+Escritorio y Android mantienen una copia autónoma del mismo núcleo `Principal.hpp`. La plantilla `Efecto<Imagen>` ejecuta el algoritmo una vez con `cv::Mat` para CPU y otra con `cv::UMat` para la ruta OpenCL. Se conserva esta duplicación entre repositorios para que cada proyecto compile sin depender de una ruta absoluta al otro.
+
+| Parte | Función principal |
 |---|---|
-| Principal.hpp | Parámetros, validación y algoritmo Spiderman compartido por Mat y UMat. |
-| Principal.cpp | Fuente de video, selección OpenCL, tiempos, interfaz y ejecución principal. |
-| Interfaz.hpp | Doce trackbars nativos, lectura de valores y teclado. |
-| Mediciones.hpp / Mediciones.cpp | RAM y porcentajes CPU/GPU del proceso Windows. |
-| Vista3D.hpp | Comparación como textura de un plano VTK integrado en Lienzo. |
+| [Principal.hpp](../Principal.hpp) | Parámetros, validación, filtro, reducción a cuadrícula y dibujo ASCII. |
+| [Principal.cpp](../Principal.cpp) | Cámara/archivo, ciclo de frames, selección Mat/UMat, tiempos y ventana. |
+| [Interfaz.hpp](../Interfaz.hpp) | Siete controles y teclas de escritorio. |
+| [Vista3D.hpp](../Vista3D.hpp) | Compone original y resultado y los actualiza como textura VTK. |
+| [Mediciones.cpp](../Mediciones.cpp) | Recursos del proceso en Windows. |
 
-No hay registro de muestras ni exportación CSV. Las cifras de la demostración se muestran en pantalla. El informe conserva datos históricos de pruebas anteriores, no archivos generados por la versión actual.
+En Android, `MainActivity.kt` administra permisos, cámara y controles. `onCameraFrame` toma el `Mat` RGBA prestado por OpenCV y llama a `procesarFrame` de `native-lib.cpp` (JNI). JNI valida y serializa la llamada; `ProcesadorAndroid.hpp` convierte RGBA a BGR, procesa las rutas CPU/GPU, prepara la vista y devuelve una matriz RGBA del mismo tamaño. Kotlin devuelve esa matriz a la vista de cámara y actualiza las métricas. Al pausar se desactiva la cámara; al detenerse se liberan matrices y se reinicia el procesador.
 
-## 1. Capturar y procesar
+En el repositorio `App-movil-vision`, los archivos Kotlin están en `app/src/main/java/com/example/interciclovision` y el C++ nativo en `app/src/main/cpp`.
 
-`abrirFuente` abre una cámara numérica o un archivo. Intenta DirectShow y después el backend disponible. `leerFrame` comprueba la lectura y ajusta la resolución cuando hace falta. En visualización, un archivo termina normalmente al llegar a su final; una cámara que deja de entregar imágenes produce un error. No se procesa un fotograma vacío.
+No hay una aplicación web separada en el alcance actual. El informe se preparará en la plantilla académica cuando esté disponible.
 
-Cada vuelta lee los controles, toma los parámetros del fotograma, procesa y muestra el resultado. `waitKey` atiende HighGUI y `spinOnce` atiende VTK. No se abre un segundo bucle bloqueante para inspeccionar la escena.
+## 2. Recorrido matemático de un fotograma
 
-## 2. Efecto Spiderman
+En ambos sistemas el núcleo recibe una imagen BGR. `Efecto::procesar` aplica estos pasos en orden:
 
-1. **CLAHE:** convertir BGR a Lab, ajustar el canal L y recuperar color. Evita ecualizar separadamente cada canal de color.
-2. **Mediana 3×3:** reduce valores aislados antes de detectar bordes y reducir colores.
-3. **Gris y Gaussiano:** obtener luminosidad y suavizar detalles pequeños.
-4. **Sobel X/Y:** calcular cambios horizontales y verticales en CV_16S, obtener magnitudes y combinarlas con pesos 0.5/0.5, como el Ejemplo 6.
-5. **Kernel propio:** aplicar filter2D en CV_32F para no perder signo ni decimales antes de obtener su magnitud.
-6. **Umbral:** combinar Sobel con el detector propio y seleccionar la máscara de tinta negra.
-7. **LUT:** reducir el número de niveles por canal para formar colores planos.
-8. **Paleta y texturas:** teñir sombras/luces y aplicar puntos y rayado mediante máscaras.
-9. **Tinta:** pintar de negro los píxeles de la máscara de contornos.
-10. **HSV y glitch:** modificar saturación/brillo y desplazar azul/rojo en sentidos opuestos, conservando verde.
+1. `cvtColor` calcula una luminancia aproximada: `Y ≈ 0.114 B + 0.587 G + 0.299 R`. La conversión no significa que los tres canales tengan el mismo peso.
+2. `medianBlur` usa una ventana 3×3: ordena los nueve valores y conserva el central. Es distinto del promedio: un píxel extremo aislado suele desaparecer sin mezclarse con todo el vecindario.
+3. `CLAHE` ajusta contraste localmente por regiones y limita el refuerzo de contraste para no amplificarlo sin control. El código usa el parámetro `contraste`; no hace falta memorizar una fórmula interna de OpenCV.
+4. `GaussianBlur` suaviza la imagen antes de medir bordes. Cada vecino recibe un peso Gaussiano discreto proporcional a `exp(-(x²+y²)/(2σ²))`; OpenCV normaliza los pesos para que sumen uno. El kernel inicial es 5×5 y `sigma` inicial es 1.73.
 
-Los contornos se calculan antes de dibujar la trama para no detectar los puntos como bordes. Los valores se redondean y saturan a 0..255 cuando se convierten a ocho bits.
+### Bordes y filtro propio
 
-La LUT aproxima intensidad I a n niveles mediante `round(I·(n−1)/255)·255/(n−1)`. Los puntos usan celdas 8×8 y radio `round((255−I)·R/255)`, limitado a tonos medios 70..180; conservan 65 % del color. El rayado afecta sombras 0..69 y conserva 70 %. Los patrones se reutilizan mientras no cambian resolución o parámetros, evitando reconstruirlos por fotograma.
+`detectarContornos` calcula las derivadas aproximadas `Gx` y `Gy` con Sobel en tipo con signo `CV_16S`. Al omitir `ksize`, OpenCV usa el tamaño por defecto 3. `convertScaleAbs` toma el valor absoluto y lo limita a ocho bits. `addWeighted` promedia esas magnitudes ya limitadas: `S≈(min(255,|Gx|)+min(255,|Gy|))/2`. No calcula la magnitud euclidiana `sqrt(Gx²+Gy²)`.
 
-## 3. Kernel propio
+El kernel propio se define en `crearKernel(a)`:
 
 ```text
-           [ -a    -1       0 ]
-K(a) =     [ -1   4+2a     -1 ] / (4+2a)
-           [  0    -1      -a ]
+            [ -a     -1       0 ]
+K(a) = 1/(4+2a) * [ -1   4+2a     -1 ]
+            [  0     -1      -a ]
 ```
 
-El parámetro a vale inicialmente 1 y varía entre 0 y 3. La suma `(4+2a−4−2a)/(4+2a)` es cero: una región de intensidad constante c da `c·sum(K)=0`. Los cambios entre el centro y sus vecinos producen una respuesta. La simetría de 180° hace coincidir aquí correlación y convolución.
+La suma de los nueve coeficientes es cero. Por eso, una región constante `c` produce `c·sum(K)=0`; una diferencia entre el centro y sus vecinos produce respuesta. `a` regula dos vecinos diagonales, entre 0 y 3. En el valor inicial `a=1`, el centro pesa `6/6=1` y los otros seis vecinos pesan en total `-6/6=-1`.
 
-El peso w mezcla las magnitudes: `D=(1−w)·Sobel+w·abs(propio)`. Inicialmente w=0.30: 70 % Sobel y 30 % propio. El umbral 40 selecciona los contornos. La matriz propia es 3×3; el tamaño Gaussiano ajustable 3..51 permite aumentar la carga espacial. Spiderman es el nombre del efecto combinado, no un kernel estándar publicado.
+`filter2D` conserva la respuesta con signo en `CV_32F`; `convertScaleAbs` obtiene su magnitud `H=|K*Y|`. Aunque `filter2D` aplica correlación, la matriz es simétrica por rotación de 180°, así que aquí da el mismo resultado que una convolución. La combinación usa `E=(1−w)S+wH`, con `w=0.30`: 70% Sobel y 30% filtro propio. `threshold` convierte `E` en una máscara con umbral inicial 40 y `medianBlur` limpia puntos aislados de esa máscara.
 
-## 4. CPU y GPU sin duplicar el algoritmo
+Los siete controles son: umbral 40; tamaño Gaussiano 5; sigma 1.73; peso propio 0.30; diagonal `a=1`; celda ASCII 9; contraste CLAHE 1.5. Los rangos se validan en `Parametros::validar`; los decimales de las barras se representan como enteros escalados por 100.
 
-`Efecto<Imagen>` utiliza la misma secuencia con `Mat` o `UMat`. Mat usa CPU; UMat habilita T-API/OpenCL en las operaciones compatibles. No significa que todas las operaciones estén garantizadas en GPU.
+### De imágenes pequeñas a caracteres
 
-`prepararOpenCL` selecciona un dispositivo GPU explícito y comprueba el contexto. La ruta GPU no se etiqueta como válida si realmente se está usando un dispositivo CPU.
+`Efecto::procesar` reduce cuatro mapas con `INTER_AREA`: brillo, máscara de bordes y `Gx/Gy` con signo. Si el fotograma mide `W×H` y el tamaño de celda es `c`, la cuadrícula es aproximadamente `max(1,W/c) × max(1,H/(c·3/2))`. El parámetro `celda` inicia en 9 y varía entre 6 y 24. INTER_AREA promedia el área que representa cada celda; no selecciona solo un píxel.
 
-`procesarFrame` mide CPU cuando el modo lo pide, después activa OpenCL y mide subida, filtrado y bajada. `ocl::finish()` espera el trabajo terminado antes de leer cada intervalo. El total GPU es la suma de esas tres fases. Un tiempo −1 representa una ruta no ejecutada y se muestra como una raya, no como cero.
+`caracterAscii` decide el símbolo de cada celda. Si la cobertura de borde llega a 25 sobre 255 y hay gradiente, elige `|`, `-`, `/` o `\` según los valores y signos de `Gx` y `Gy`. El carácter va a lo largo del borde, perpendicular al gradiente. Si no, el brillo `L` escoge uno de diez caracteres con `i=(L·9+127)/255`; la división entera aproxima el redondeo al más cercano. `dibujarAscii` prepara fichas con `putText`, las copia en una cuadrícula y ajusta el resultado al tamaño de entrada. La ruta UMat solo descarga los cuatro mapas reducidos; el texto se dibuja en CPU.
 
-En comparación se procesa el mismo fotograma en ambas rutas. Los redondeos pueden variar entre Mat y UMat, especialmente cerca del umbral; compartir matemática no garantiza igualdad de todos los píxeles.
+En Android la cámara entrega RGBA. `ProcesadorAndroid` convierte `RGBA→BGR` para usar el núcleo común y convierte el resultado `BGR→RGBA` para devolverlo a la cámara. En la comparación, las imágenes completas original y ASCII se encajan sin deformación, en horizontal o vertical según la orientación. Las vistas intermedias permiten inspeccionar gris, mediana, Gaussiano, gradiente, respuesta propia y máscara. «Portal ASCII» deja el video original fuera de un rectángulo central y muestra ASCII dentro; no detecta a una persona ni reconstruye AR.
 
-## 5. Controles y ventanas
+## 3. Escritorio, GPU y mediciones
 
-`crearControles` construye una sola vez doce barras con createTrackbar. `leerControles` recupera posiciones con getTrackbarPos y convierte enteros escalados por 100 a decimales. El Gaussiano siempre es impar; al seleccionar un par se salta al impar vecino en la dirección del ajuste.
+`main` valida opciones y parámetros, abre cámara o video y selecciona modo. `visualizar` procesa cada frame y mantiene una sola ventana. `Vista3D::componer` copia original y ASCII en dos regiones `Rect` de una matriz; `WImage3D` usa esa matriz como textura sobre un plano 3D. `actualizar` reemplaza la textura por frame y `spinOnce` atiende eventos. La cámara puede girarse, pero el plano no reconstruye profundidad ni geometría de la escena.
 
-Los parámetros son umbral, tamaño Gaussiano, sigma, peso propio, diagonal, radio, niveles, saturación, brillo, neón, glitch y CLAHE. Parametros::validar rechaza tamaños/rangos inválidos, incluyendo NaN en los decimales.
+`procesarFrame` cronometra la ruta Mat y UMat. `ocl::finish()` espera a que termine el trabajo OpenCL antes de detener el cronómetro. Muestra filtrado, transferencias y FPS de la ventana; el ciclo visible incluye lectura, dibujo, eventos y renderizado. `benchmark` calienta, rebobina un video fijo y calcula media, mediana y recursos. Es una medición de procesamiento, no la misma cifra que FPS de cámara.
 
-- **Espacio:** CPU, OpenCL y comparación, si se inició con ambas rutas disponibles.
-- **T:** resultado final, gris, Gaussiano, kernel propio y máscara.
-- **Arrastrar las imágenes:** girar la comparación 3D. **R:** restaurar el encuadre.
-- **Esc / q:** salir de la aplicación.
+Android ejecuta CPU y GPU en el mismo frame para comparar sus tiempos; el selector elige qué salida mostrar. El tiempo total de cada ruta incluye conversiones y preparación de la vista; el dibujo ASCII se hace en CPU. La app muestra FPS, RAM PSS, CPU y RAM disponible. La medición de recursos es del proceso, no dos procesos separados. `UMat` permite que OpenCV use OpenCL en las operaciones compatibles: no garantiza que toda operación vaya a GPU ni que GPU sea más rápida. Las transferencias, el tamaño del frame, el dispositivo y el dibujo pueden cambiar el resultado. RAM/PSS no es VRAM. No atribuyas una cifra de GPU al teléfono si no se midió en ese dispositivo.
 
-Una sola ventana blanca contiene la comparación, trackbars y recursos. Como en los Ejemplos 6 y 7, `copyTo` coloca original y efecto en dos regiones `Rect` de un mismo `Mat`. `Vista3D` usa ese Mat como textura de un `WImage3D` y actualiza `setImage` en cada vuelta. El visor nativo VTK es hijo de Lienzo mediante funciones de Windows; esa integración no viene de los ejemplos. La pose se conserva entre fotogramas. El cierre libera OpenGL antes de destruir la ventana hija. Es un plano con video, no una reconstrucción de la persona.
+## 4. Qué viene de clase y qué estudiar aparte
 
-## 6. Qué significan las cifras
+Los códigos docentes están bajo `Vision-Computador/Codigos`:
 
-- **ms CPU:** tiempo del efecto Mat.
-- **ms OpenCL:** tiempo del efecto UMat sincronizado. Subida y bajada aparecen aparte.
-- **FPS de ventana:** incluye lectura, procesamiento y presentación; no equivale a 1000/ms del filtro.
-- **RAM MiB:** Working Set del proceso mediante GetProcessMemoryInfo; incluye bibliotecas y búferes, no es VRAM.
-- **CPU %:** 100·delta(tiempo CPU)/(delta(tiempo de pared)·procesadores lógicos). GetProcessTimes entrega unidades de 100 ns, que se convierten antes de dividir.
-- **GPU proceso:** máximo de los motores PDH del PID actual. Incluye renderizado VTK incluso con filtro CPU. No debe interpretarse como actividad exclusiva de un kernel.
+- Unidad 1, Ejemplo 2 (`Unidad-1/Ejemplo-2-Conformación-Imágenes-Escala-Grises-Video-OpenCV/Principal.cpp`): video y conversión a gris. Ejemplo 3 (`Unidad-1/Ejemplo-3-Espacio-Color-HSV-Binarización-por-Umbral-de-Color-OpenCV/Principal.cpp`): HSV, umbrales y trackbars; aquí se reutiliza el patrón de controles, no la segmentación HSV del ejemplo.
+- Unidad 2, Ejemplo 5 (`Unidad-2/Ejemplo-5-Filtro-CLAHE-Convolución-Imágenes-OpenCV/Principal.cpp`): CLAHE y procesamiento espacial.
+- Unidad 2, Ejemplo 6 (`Unidad-2/Ejemplo-6-Filtro-Gaussiano-Filtro-Sobel-Detección-Bordes-Suavizado-OpenCV/Principal.cpp`): Gaussiano, Sobel y composición de imágenes con `Rect`/`copyTo`.
+- Unidad 2, Ejemplo 9 (`Unidad-2/Ejemplo-9-Ruido-Sal-y-Pimienta-OpenCV/Principal.cpp`): filtro mediano para reducir ruido impulsivo.
 
-CPU/GPU se muestrean aproximadamente cada segundo y RAM se consulta en cada lectura. Antes de una muestra válida se indica falta de muestra; un cero válido no se sustituye por una cifra inventada. Los recursos de la comparación pertenecen al proceso entero, no a dos programas independientes.
+El kernel artístico y el mapeo de celdas a caracteres son decisiones propias de esta versión. Para defender partes que no aparecen en los ejemplos disponibles, estudia: OpenCL/T-API y transferencias Mat/UMat; JNI y propiedad del `Mat` que presta la cámara; renderizado de textura con VTK `WImage3D`; `resize(INTER_AREA)` y conversión BGR/RGBA; y el uso de `putText`/`copyTo` para dibujar celdas. No se usa FFT, ASL, Telegram ni una app web en esta Parte I.
 
-## 7. Funciones auxiliares
+La guía del curso permite asistencia de LLM, pero exige comprender y citar el código generado o de terceros. Presenta la adaptación de ejemplos del profesor como tal; confirma cualquier procedencia de bloques que no puedas verificar. Para la defensa, explica cada operación y variable con tus palabras.
 
-`benchmark` puede procesar un video fijo sin ventanas: calienta al menos 15 fotogramas y 1.1 segundos, rebobina y calcula medias, mediana y RAM máxima. Solo imprime un resumen; no guarda archivos. No es la cadencia de cámara ni incluye VTK.
+## 5. Preguntas de práctica
 
-`main` valida opciones, cantidad y resolución; abre la fuente y selecciona el benchmark o el video en vivo. El ejecutable no graba clips ni guarda capturas. Las pruebas de VTK verifican el renderizado sin depender de un modo extra en la aplicación.
+1. **¿Por qué mediana y no promedio?** La mediana reemplaza el centro por el valor central ordenado de una ventana 3×3; suele quitar ruido impulsivo sin difundir un valor extremo a todos los vecinos. Referencia: `Efecto::procesar` en `Principal.hpp`.
+2. **¿Qué significa que el kernel sume cero?** En una región uniforme la suma ponderada cancela y la salida es cero. En un borde los vecinos y el centro no son iguales y queda una respuesta. Referencia: `crearKernel` y `detectarContornos`.
+3. **¿Qué cambia al aumentar `a` o `peso propio`?** `a` cambia la contribución de las dos diagonales del kernel. El peso controla la mezcla entre la respuesta propia y el promedio de magnitudes Sobel; no cambia Sobel.
+4. **¿Sobel devuelve la dirección del borde?** Devuelve derivadas horizontales y verticales con signo. El programa usa sus magnitudes para la máscara y los valores reducidos con signo para orientar el carácter ASCII.
+5. **¿Cómo se elige un carácter?** La cobertura de bordes decide si se usa un símbolo orientado; si no hay borde suficiente, el brillo medio selecciona densidad. Referencias: `caracterAscii` y `dibujarAscii`.
+6. **¿Por qué el resultado GPU puede ser más lento?** OpenCL puede requerir subir y bajar datos; algunas operaciones y el dibujo ASCII siguen en CPU. Se sincroniza el trabajo, pero el beneficio depende del equipo y de la carga.
+7. **¿La vista VTK es una reconstrucción 3D?** No. Es una textura dinámica sobre un plano que se puede girar; la cámara no calcula profundidad. Referencia: `Vista3D::componer` y `actualizar`.
+8. **¿Por qué cambiar RGBA a BGR en Android?** La cámara/OpenCV entrega cuatro canales, el núcleo compartido espera tres canales BGR y la vista necesita RGBA otra vez. La salida conserva las dimensiones que espera la cámara.
 
-## 8. Procedencia y comprobaciones
+### Ejercicio oral
 
-Se adaptan los ejemplos de clase 3 (HSV, máscaras, barras), 5 (CLAHE/convolución), 6 (Gaussiano/Sobel) y 9 (mediana). El kernel, composición artística, OpenCL, VTK y recursos amplían esa base; no se presenta todo el programa como copia literal del profesor.
-
-Las pruebas opcionales comprueban texturas dinámicas y pose/reapertura, ayuda sin exportación y un benchmark real que deja vacío su directorio de salida. El informe, las gráficas históricas y el guion son entregables separados del programa en vivo.
-
-## Portal en Android y acabado del cómic
-
-En Android, `aplicarPortal` usa `copyTo` con una máscara para recuperar la cámara original fuera del rectángulo; dentro conserva el filtro Spiderman. OpenCV dibuja el marco con `rectangle`. En escritorio, VTK se usa para la comparación interactiva entre el original y el efecto.
-
-Una mediana sobre la máscara reduce motas de tinta. Puntos menos oscuros y restringidos a tonos medios dejan las luces despejadas; el rayado evita el negro profundo. Para el RGB, `dilate` amplía la máscara de contornos lo justo para cubrir el desplazamiento y `copyTo` aplica el resultado solo allí. No hay reconocimiento facial ni realidad aumentada.
+Explica `crearKernel(1)` sobre una ventana uniforme y después sobre una ventana cuyo centro es más brillante que el fondo. Primero muestra que la suma de pesos es cero; luego calcula la respuesta central antes de `convertScaleAbs`. Termina explicando por qué se toma magnitud, cómo interviene el peso 70/30 y qué hace el umbral.
